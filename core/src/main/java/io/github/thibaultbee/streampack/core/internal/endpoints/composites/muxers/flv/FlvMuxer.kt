@@ -122,7 +122,7 @@ class FlvMuxer(
         listener?.onOutputFrame(
             Packet(
                 OnMetadata.fromConfigs(streams.map { it.config }).write(),
-                TimeUtils.currentTime()
+                0
             )
         )
     }

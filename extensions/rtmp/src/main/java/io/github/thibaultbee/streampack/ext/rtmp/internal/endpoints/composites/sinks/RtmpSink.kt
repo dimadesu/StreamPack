@@ -15,26 +15,30 @@
  */
 package io.github.thibaultbee.streampack.ext.rtmp.internal.endpoints.composites.sinks
 
+import io.github.thibaultbee.krtmp.rtmp.client.publish.RtmpPublishClient
+import io.github.thibaultbee.krtmp.rtmp.messages.Command
 import io.github.thibaultbee.streampack.core.data.VideoConfig
 import io.github.thibaultbee.streampack.core.data.mediadescriptor.MediaDescriptor
 import io.github.thibaultbee.streampack.core.internal.data.Packet
 import io.github.thibaultbee.streampack.core.internal.endpoints.MediaSinkType
 import io.github.thibaultbee.streampack.core.internal.endpoints.composites.sinks.EndpointConfiguration
 import io.github.thibaultbee.streampack.core.internal.endpoints.composites.sinks.ISink
+import io.github.thibaultbee.streampack.core.internal.utils.extensions.toByteArray
 import io.github.thibaultbee.streampack.core.logger.Logger
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
-import video.api.rtmpdroid.Rtmp
 import java.util.concurrent.Executors
 
 class RtmpSink(
     private val dispatcher: CoroutineDispatcher = Executors.newSingleThreadExecutor()
         .asCoroutineDispatcher()
 ) : ISink {
-    private var socket = Rtmp()
+    private val factory = RtmpPublishClient.Factory()
+    private var client: RtmpPublishClient? = null
+
     private var isOnError = false
 
     private val _isOpened = MutableStateFlow(false)
@@ -46,7 +50,7 @@ class RtmpSink(
     override fun configure(config: EndpointConfiguration) {
         val videoConfig = config.streamConfigs.firstOrNull { it is VideoConfig }
         if (videoConfig != null) {
-            socket.supportedVideoCodecs = listOf(videoConfig.mimeType)
+            //  client.supportedVideoCodecs = listOf(videoConfig.mimeType)
         }
     }
 
@@ -57,53 +61,77 @@ class RtmpSink(
         withContext(dispatcher) {
             try {
                 isOnError = false
-                socket.connect("${mediaDescriptor.uri} live=1 flashver=FMLE/3.0\\20(compatible;\\20FMSc/1.0)")
+                client = factory.create("${mediaDescriptor.uri}").apply {
+                    connect()
+                }
                 _isOpened.emit(true)
             } catch (e: Exception) {
-                socket = Rtmp()
+                client = null
                 _isOpened.emit(false)
                 throw e
             }
         }
     }
 
-    override suspend fun write(packet: Packet) =
-        withContext(dispatcher) {
-            if (isOnError) {
-                return@withContext
-            }
 
-            if (!(isOpened.value)) {
-                Logger.w(TAG, "Socket is not connected, dropping packet")
-                return@withContext
-            }
-
-            try {
-                socket.write(packet.buffer)
-            } catch (e: Exception) {
-                close()
-                isOnError = true
-                _isOpened.emit(false)
-                Logger.e(TAG, "Error while writing packet to socket", e)
-                throw e
-            }
+    override suspend fun write(packet: Packet) = withContext(dispatcher) {
+        val client = client ?: throw IllegalStateException("Rtmp client is not initialized")
+        if (isOnError) {
+            return@withContext
         }
 
+        if (!(isOpened.value)) {
+            Logger.w(TAG, "Socket is not connected, dropping packet")
+            return@withContext
+        }
+
+        try {
+            /* if (packet.isAudio || packet.isVideo) {
+                 client.writeFrame(packet.buffer.toByteArray())
+             }*/
+            client.writeFrame(packet.buffer.toByteArray())
+            /* if (packet.isAudio) {
+                 client.writeAudio(packet.ts.toInt(), packet.buffer.toByteArray())
+             } else if (packet.isVideo) {
+                 client.writeVideo(packet.ts.toInt(), packet.buffer.toByteArray())
+             } else {
+                client.writeSetDataFrame(packet.buffer.array())
+             }*/
+        } catch (e: Exception) {
+            close()
+            isOnError = true
+            _isOpened.emit(false)
+            Logger.e(TAG, "Error while writing packet to socket", e)
+            throw e
+        }
+    }
+
     override suspend fun startStream() {
+        val client = client!!
         withContext(dispatcher) {
-            socket.connectStream()
+            client.createStream()
+            client.publish(Command.Publish.Type.LIVE)
         }
     }
 
     override suspend fun stopStream() {
-        // No need to stop stream
+        withContext(dispatcher) {
+            try {
+                client?.deleteStream()
+            } catch (e: Exception) {
+                Logger.e(TAG, "Error while stopping stream", e)
+            }
+        }
     }
 
     override suspend fun close() {
+        if (client == null) {
+            return
+        }
         withContext(dispatcher) {
-            socket.close()
+            client?.close()
             _isOpened.emit(false)
-            socket = Rtmp()
+            client = null
         }
     }
 
