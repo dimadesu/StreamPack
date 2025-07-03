@@ -18,7 +18,7 @@ android {
 dependencies {
     implementation(project(":streampack-core"))
 
-    implementation(libs.rtmpdroid)
+    implementation(libs.rtmp)
 
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.core.ktx)

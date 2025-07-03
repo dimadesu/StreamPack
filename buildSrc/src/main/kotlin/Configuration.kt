@@ -1,5 +1,5 @@
 object AndroidVersions {
-    const val MIN_SDK = 21
+    const val MIN_SDK = 30 // Temporary to avoid `Space characters in SimpleName 'use streaming syntax' are not allowed prior to DEX version 040` See https://youtrack.jetbrains.com/issue/KTOR-8583
     const val TARGET_SDK = 35
     const val COMPILE_SDK = 35
 }

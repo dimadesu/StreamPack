@@ -125,14 +125,18 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     init {
         viewModelScope.launch {
             streamerFlow.collect {
-                // Set audio source and video source
-                streamer.setAudioSource(MicrophoneSourceFactory())
-                if (ActivityCompat.checkSelfPermission(
-                        application,
-                        Manifest.permission.CAMERA
-                    ) == PackageManager.PERMISSION_GRANTED
-                ) {
-                    streamer.setVideoSource(CameraSourceFactory())
+                if (it.withAudio) {
+                    // Set audio source and video source
+                    it.setAudioSource(MicrophoneSourceFactory())
+                }
+                if (it.withVideo) {
+                    if (ActivityCompat.checkSelfPermission(
+                            application,
+                            Manifest.permission.CAMERA
+                        ) == PackageManager.PERMISSION_GRANTED
+                    ) {
+                        it.setVideoSource(CameraSourceFactory())
+                    }
                 }
             }
         }

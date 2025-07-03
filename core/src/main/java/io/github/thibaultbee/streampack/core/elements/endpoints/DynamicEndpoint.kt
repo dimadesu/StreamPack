@@ -203,7 +203,7 @@ open class DynamicEndpoint(
 
     private fun getRtmpEndpoint(): IEndpointInternal {
         if (rtmpEndpoint == null) {
-            rtmpEndpoint = CompositeEndpoints.createRtmpEndpoint()
+            rtmpEndpoint = Endpoints.createRtmpEndpoint()
         }
         return rtmpEndpoint!!
     }
