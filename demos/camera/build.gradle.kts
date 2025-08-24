@@ -63,6 +63,11 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.datastore)
 
+    implementation("com.github.HaishinKit.HaishinKit~kt:haishinkit:0.16.0")
+    implementation("com.github.HaishinKit.HaishinKit~kt:rtmp:0.16.0")
+    implementation("com.github.HaishinKit.HaishinKit~kt:compose:0.16.0")
+    implementation("com.github.HaishinKit.HaishinKit~kt:lottie:0.16.0")
+
     testImplementation(libs.junit)
 
     androidTestImplementation(libs.androidx.junit)
