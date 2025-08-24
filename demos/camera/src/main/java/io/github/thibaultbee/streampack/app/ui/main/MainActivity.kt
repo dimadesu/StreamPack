@@ -47,6 +47,10 @@ class MainActivity : AppCompatActivity() {
         binding.actions.setOnClickListener {
             showPopup()
         }
+        binding.playRtmpButton.setOnClickListener {
+            val intent = Intent(this, RtmpPlaybackActivity::class.java)
+            startActivity(intent)
+        }
     }
 
     private fun showPopup() {

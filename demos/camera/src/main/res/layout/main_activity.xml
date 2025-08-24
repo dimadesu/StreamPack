@@ -17,4 +17,12 @@
         android:contentDescription="@string/menu_actions"
         android:src="@drawable/ic_baseline_more_vert_24"
         app:borderWidth="0dp" />
+
+    <Button
+        android:id="@+id/playRtmpButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Play RTMP Stream"
+        android:layout_gravity="bottom|center"
+        android:layout_margin="24dp" />
 </FrameLayout>

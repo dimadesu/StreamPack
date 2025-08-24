@@ -30,6 +30,7 @@
             </intent-filter>
         </activity>
         <activity android:name=".ui.settings.SettingsActivity" />
+        <activity android:name="io.github.thibaultbee.streampack.app.ui.main.RtmpPlaybackActivity" />
     </application>
 
 </manifest>
