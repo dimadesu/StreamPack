@@ -26,7 +26,7 @@ class RtmpPlaybackActivity : AppCompatActivity() {
         Log.d("RtmpPlaybackActivity", "RTMP factory registered")
 
         // Build the session for playback
-        val rtmpUrl = "rtmp://localhost:1935/publish/mystream" // TODO: Replace with your RTMP URL
+        val rtmpUrl = "rtmp://localhost:1935/publish/live" // TODO: Replace with your RTMP URL
         Log.d("RtmpPlaybackActivity", "RTMP URL: $rtmpUrl")
         val uri = Uri.parse(rtmpUrl)
         streamSession = StreamSession.Builder(this, uri).build()
