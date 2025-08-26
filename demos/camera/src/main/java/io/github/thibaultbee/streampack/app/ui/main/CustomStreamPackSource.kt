@@ -69,6 +69,7 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
 
     override suspend fun setOutput(surface: android.view.Surface) {
         outputSurface = surface
+        hkSurfaceView?.pixelTransform?.surface = surface
     }
 
     override suspend fun hasPreview(): Boolean {
