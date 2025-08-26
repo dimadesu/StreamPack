@@ -61,26 +61,26 @@ private class DefaultSurfaceProcessor2(
             // Original surface
             //
 
-            // val surfaceTexture = SurfaceTexture(renderer.textureName)
-            // surfaceTexture.setDefaultBufferSize(surfaceSize.width, surfaceSize.height)
-            // surfaceTexture.setOnFrameAvailableListener(this, glHandler)
-            // if (dynamicRangeProfile.isHdr) {
-            //     renderer.setInputFormat(GLUtils.InputFormat.YUV)
-            // }
+            val surfaceTexture = SurfaceTexture(renderer.textureName)
+            surfaceTexture.setDefaultBufferSize(surfaceSize.width, surfaceSize.height)
+            surfaceTexture.setOnFrameAvailableListener(this, glHandler)
+            if (dynamicRangeProfile.isHdr) {
+                renderer.setInputFormat(GLUtils.InputFormat.YUV)
+            }
 
-            // surfaceInputsTimestampInNsMap[surfaceTexture] = timestampOffsetInNs
+            surfaceInputsTimestampInNsMap[surfaceTexture] = timestampOffsetInNs
 
-            // SurfaceInput(Surface(surfaceTexture), surfaceTexture)
+            SurfaceInput(Surface(surfaceTexture), surfaceTexture)
 
 
             //
             // Haishin Kit surface
             //
-            val hkSurfaceView = HkSurfaceView(context)
-            hkSurfaceView.layoutParams = ViewGroup.LayoutParams(surfaceSize.width, surfaceSize.height)
-            val hkSurface = hkSurfaceView.holder.surface
+            // val hkSurfaceView = HkSurfaceView(context)
+            // hkSurfaceView.layoutParams = ViewGroup.LayoutParams(surfaceSize.width, surfaceSize.height)
+            // val hkSurface = hkSurfaceView.holder.surface
             
-            SurfaceInput(hkSurface, null)
+            // SurfaceInput(hkSurface, null)
         }
 
         val surfaceInput = future.get()
