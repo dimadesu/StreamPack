@@ -29,6 +29,20 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
     private var rtmpStreamSession: StreamSession? = null
 
     override suspend fun startStream() {
+// TODO: Need a different way to pass this
+//        hkSurfaceView?.dataSource = WeakReference(rtmpStreamSession?.stream)
+
+        GlobalScope.launch {
+            try {
+                val result = rtmpStreamSession?.connect(StreamSession.Method.PLAYBACK)
+                if (result == null || result.isFailure) {
+                    android.util.Log.e("CustomStreamPackSource", "RTMP playback failed: ${result?.exceptionOrNull()?.message}")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("CustomStreamPackSource", "RTMP playback exception: ${e.message}", e)
+            }
+        }
+
         _isStreamingFlow.value = true
     }
 
@@ -61,7 +75,6 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
         get() = _isPreviewingFlow
 
     private var outputSurface: android.view.Surface? = null
-    internal var hkSurfaceView: MyRtmpSurfaceView? = null
     override suspend fun getOutput(): android.view.Surface? {
         return outputSurface
     }
@@ -115,29 +128,14 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
 
     class Factory(private val hkSurfaceView: MyRtmpSurfaceView? = null) : IVideoSourceInternal.Factory {
         override suspend fun create(context: Context): IVideoSourceInternal {
+
+            val customSource = CustomStreamPackSourceInternal()
+
             val rtmpUrl = "rtmp://localhost:1935/publish/live" // TODO: Replace with your RTMP URL or pass as parameter
             val uri = android.net.Uri.parse(rtmpUrl)
             StreamSession.Builder.registerFactory(com.haishinkit.rtmp.RtmpStreamSessionFactory)
             val session = StreamSession.Builder(context, uri).build()
-
-            val customSource = CustomStreamPackSourceInternal()
             customSource.rtmpStreamSession = session
-            customSource.hkSurfaceView = hkSurfaceView
-
-            // // If a HkSurfaceView is provided, wire it to the RTMP stream for preview
-            // hkSurfaceView?.dataSource = WeakReference(session.stream)
-
-
-            GlobalScope.launch {
-                try {
-                    val result = session.connect(StreamSession.Method.PLAYBACK)
-                    if (result == null || result.isFailure) {
-                        android.util.Log.e("CustomStreamPackSource", "RTMP playback failed: ${result?.exceptionOrNull()?.message}")
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.e("CustomStreamPackSource", "RTMP playback exception: ${e.message}", e)
-                }
-            }
 
             return customSource
         }
