@@ -62,12 +62,13 @@
                 android:src="@drawable/ic_switch_camera_24px"
                 app:tint="@android:color/white" />
 
-            <Button
-                android:id="@+id/showRtmpPreviewButton"
+            <ToggleButton
+                android:id="@+id/toggleRtmpPreviewButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Show RTMP Preview"
-                android:contentDescription="Show RTMP Preview" />
+                android:textOn="Hide RTMP Preview"
+                android:textOff="Show RTMP Preview"
+                android:contentDescription="Toggle RTMP Preview" />
 
         </LinearLayout>
 

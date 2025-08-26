@@ -91,6 +91,16 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
     private val previewViewModel: PreviewViewModel by viewModels {
         PreviewViewModelFactory(requireActivity().application)
     }
+    private fun hideRtmpPreviewOverlay() {
+        rtmpSurfaceView?.let { binding.previewContainer.removeView(it) }
+        rtmpSurfaceView = null
+        rtmpStreamSession?.let { session ->
+            viewLifecycleOwner.lifecycleScope.launch {
+                session.close()
+            }
+        }
+        rtmpStreamSession = null
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -105,8 +115,12 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
 
     @SuppressLint("MissingPermission")
     private fun bindProperties() {
-        binding.showRtmpPreviewButton.setOnClickListener {
-            showRtmpPreviewOverlay()
+        binding.toggleRtmpPreviewButton.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                showRtmpPreviewOverlay()
+            } else {
+                hideRtmpPreviewOverlay()
+            }
         }
         binding.liveButton.setOnClickListener { view ->
             view as ToggleButton
