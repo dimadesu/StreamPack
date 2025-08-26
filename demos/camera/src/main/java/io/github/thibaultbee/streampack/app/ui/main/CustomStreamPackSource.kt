@@ -17,7 +17,11 @@ import kotlinx.coroutines.flow.StateFlow
 import java.lang.ref.WeakReference
 import java.util.concurrent.LinkedBlockingQueue
 
-class CustomStreamPackSourceInternal : IVideoSourceInternal, MediaOutput {
+import io.github.thibaultbee.streampack.core.elements.sources.video.AbstractPreviewableSource
+import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoFrameSourceInternal
+
+class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
+    IVideoFrameSourceInternal {
     override val infoProviderFlow: StateFlow<ISourceInfoProvider> = MutableStateFlow(object : ISourceInfoProvider {
         override fun getSurfaceSize(targetResolution: android.util.Size): android.util.Size = targetResolution
         override val rotationDegrees: Int = 0
@@ -30,12 +34,10 @@ class CustomStreamPackSourceInternal : IVideoSourceInternal, MediaOutput {
     private var rtmpStreamSession: StreamSession? = null
 
     override suspend fun startStream() {
-        // TODO: Start streaming frames from RTMP
         _isStreamingFlow.value = true
     }
 
     override suspend fun stopStream() {
-        // TODO: Stop streaming
         _isStreamingFlow.value = false
     }
 
@@ -44,7 +46,6 @@ class CustomStreamPackSourceInternal : IVideoSourceInternal, MediaOutput {
     }
 
     override fun release() {
-        // Clean up RTMP session
         rtmpStreamSession?.let { session ->
             GlobalScope.launch {
                 session.close()
@@ -61,25 +62,79 @@ class CustomStreamPackSourceInternal : IVideoSourceInternal, MediaOutput {
     // MediaOutput interface requirement
     override var dataSource: WeakReference<MediaOutputDataSource>? = null
 
+    // AbstractPreviewableSource required members (stubbed for RTMP source)
+    override val timestampOffsetInNs: Long
+        get() = 0L
+
+    private val _isPreviewingFlow = MutableStateFlow(false)
+    override val isPreviewingFlow: StateFlow<Boolean>
+        get() = _isPreviewingFlow
+
+    override suspend fun getOutput(): android.view.Surface? {
+        // RTMP source does not use output surface
+        return null
+    }
+
+    override suspend fun setOutput(surface: android.view.Surface) {
+        // RTMP source does not use output surface
+    }
+
+    override suspend fun hasPreview(): Boolean {
+        // RTMP source does not support preview surface
+        return false
+    }
+
+    override suspend fun setPreview(surface: android.view.Surface) {
+        // RTMP source does not support preview surface
+    }
+
+    override suspend fun startPreview() {
+        // RTMP source does not support preview
+        _isPreviewingFlow.value = false
+    }
+
+    override suspend fun startPreview(previewSurface: android.view.Surface) {
+        // RTMP source does not support preview
+        _isPreviewingFlow.value = false
+    }
+
+    override suspend fun stopPreview() {
+        // RTMP source does not support preview
+        _isPreviewingFlow.value = false
+    }
+
+    override fun <T> getPreviewSize(targetSize: android.util.Size, targetClass: Class<T>): android.util.Size {
+        // RTMP source does not support preview size selection
+        return targetSize
+    }
+
     // MediaOutput: called by RTMP pipeline
     override fun append(buffer: MediaBuffer) {
         // Enqueue the incoming frame for later delivery
         frameQueue.offer(buffer)
     }
 
-    // Implement IVideoFrameSourceInternal: deliver frames to StreamPack
-    fun getVideoFrame(frameFactory: IReadOnlyRawFrameFactory): RawFrame {
+    // AbstractPreviewableSource: deliver frames to StreamPack
+    override fun getVideoFrame(frameFactory: IReadOnlyRawFrameFactory): RawFrame {
         val buffer = frameQueue.poll()
         return if (buffer != null && buffer.payload != null) {
-            // Wrap the RTMP frame data in a RawFrame for StreamPack
             RawFrame(
                 rawBuffer = buffer.payload!!,
                 timestampInUs = buffer.timestamp
             )
         } else {
-            // If no frame is available, return an empty RawFrame
             frameFactory.create(0, 0L)
         }
+    }
+
+    // AbstractPreviewableSource: implement preview reset logic
+    override suspend fun resetPreviewImpl() {
+        // No-op for RTMP source, unless preview surface needs to be reset
+    }
+
+    // AbstractPreviewableSource: implement output reset logic
+    override suspend fun resetOutputImpl() {
+        frameQueue.clear()
     }
 
     companion object {
@@ -92,18 +147,15 @@ class CustomStreamPackSourceInternal : IVideoSourceInternal, MediaOutput {
 
     class Factory : IVideoSourceInternal.Factory {
         override suspend fun create(context: Context): IVideoSourceInternal {
-            // Build RTMP session for playback
             val rtmpUrl = "rtmp://localhost:1935/publish/live" // TODO: Replace with your RTMP URL or pass as parameter
             val uri = android.net.Uri.parse(rtmpUrl)
             StreamSession.Builder.registerFactory(com.haishinkit.rtmp.RtmpStreamSessionFactory)
             val session = StreamSession.Builder(context, uri).build()
 
-            // Create custom source and wire to RTMP
             val customSource = CustomStreamPackSourceInternal()
             customSource.rtmpStreamSession = session
             session.stream.registerOutput(customSource)
 
-            // Start playback
             GlobalScope.launch {
                 try {
                     val result = session.connect(StreamSession.Method.PLAYBACK)
