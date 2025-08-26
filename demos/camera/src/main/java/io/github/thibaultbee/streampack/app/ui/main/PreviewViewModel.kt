@@ -327,10 +327,15 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         viewModelScope.launch {
             val nextSource = when (videoSource) {
                 is ICameraSource -> {
-                    BitmapSourceFactory(testBitmap)
+//                    BitmapSourceFactory(testBitmap)
+                    CustomStreamPackSourceInternal.Factory()
                 }
 
                 is IBitmapSource -> {
+                    CameraSourceFactory()
+                }
+
+                is CustomStreamPackSourceInternal -> {
                     CameraSourceFactory()
                 }
 

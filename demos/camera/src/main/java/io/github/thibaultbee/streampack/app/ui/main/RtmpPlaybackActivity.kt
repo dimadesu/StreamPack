@@ -39,8 +39,29 @@ class RtmpPlaybackActivity : AppCompatActivity() {
         // Start playback (coroutine context required)
         lifecycleScope.launch {
             Log.d("RtmpPlaybackActivity", "Starting playback...")
-            val result = streamSession?.connect(StreamSession.Method.PLAYBACK)
-            Log.d("RtmpPlaybackActivity", "Playback connect result: $result")
+            try {
+                val result = streamSession?.connect(StreamSession.Method.PLAYBACK)
+                Log.d("RtmpPlaybackActivity", "Playback connect result: $result")
+                if (result == null || result.isFailure) {
+                    Log.e("RtmpPlaybackActivity", "Playback failed: ${result?.exceptionOrNull()?.message}")
+                    runOnUiThread {
+                        android.widget.Toast.makeText(
+                            this@RtmpPlaybackActivity,
+                            "RTMP playback failed: ${result?.exceptionOrNull()?.message ?: "Unknown error"}",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("RtmpPlaybackActivity", "Playback exception: ${e.message}", e)
+                runOnUiThread {
+                    android.widget.Toast.makeText(
+                        this@RtmpPlaybackActivity,
+                        "RTMP playback exception: ${e.message}",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
         }
     }
 
