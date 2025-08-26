@@ -10,6 +10,8 @@ import io.github.thibaultbee.streampack.core.elements.processing.video.source.IS
 import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoSourceInternal
 import io.github.thibaultbee.streampack.core.elements.sources.video.VideoSourceConfig
 import io.github.thibaultbee.streampack.core.elements.utils.pool.IReadOnlyRawFrameFactory
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.lang.ref.WeakReference
@@ -23,6 +25,9 @@ class CustomStreamPackSourceInternal : IVideoSourceInternal, MediaOutput {
     })
     private val _isStreamingFlow = MutableStateFlow(false)
     override val isStreamingFlow: StateFlow<Boolean> get() = _isStreamingFlow
+
+    // Store RTMP session for lifecycle management
+    private var rtmpStreamSession: StreamSession? = null
 
     override suspend fun startStream() {
         // TODO: Start streaming frames from RTMP
@@ -39,7 +44,14 @@ class CustomStreamPackSourceInternal : IVideoSourceInternal, MediaOutput {
     }
 
     override fun release() {
-        // TODO: Clean up resources
+        // Clean up RTMP session
+        rtmpStreamSession?.let { session ->
+            GlobalScope.launch {
+                session.close()
+            }
+        }
+        rtmpStreamSession = null
+        frameQueue.clear()
     }
 
 
@@ -80,7 +92,30 @@ class CustomStreamPackSourceInternal : IVideoSourceInternal, MediaOutput {
 
     class Factory : IVideoSourceInternal.Factory {
         override suspend fun create(context: Context): IVideoSourceInternal {
-            return CustomStreamPackSourceInternal()
+            // Build RTMP session for playback
+            val rtmpUrl = "rtmp://localhost:1935/publish/live" // TODO: Replace with your RTMP URL or pass as parameter
+            val uri = android.net.Uri.parse(rtmpUrl)
+            StreamSession.Builder.registerFactory(com.haishinkit.rtmp.RtmpStreamSessionFactory)
+            val session = StreamSession.Builder(context, uri).build()
+
+            // Create custom source and wire to RTMP
+            val customSource = CustomStreamPackSourceInternal()
+            customSource.rtmpStreamSession = session
+            session.stream.registerOutput(customSource)
+
+            // Start playback
+            GlobalScope.launch {
+                try {
+                    val result = session.connect(StreamSession.Method.PLAYBACK)
+                    if (result == null || result.isFailure) {
+                        android.util.Log.e("CustomStreamPackSource", "RTMP playback failed: ${result?.exceptionOrNull()?.message}")
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("CustomStreamPackSource", "RTMP playback exception: ${e.message}", e)
+                }
+            }
+
+            return customSource
         }
 
         override fun isSourceEquals(source: IVideoSourceInternal?): Boolean {
