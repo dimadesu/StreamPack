@@ -17,6 +17,7 @@ import java.lang.ref.WeakReference
 import io.github.thibaultbee.streampack.core.elements.sources.video.AbstractPreviewableSource
 
 class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput, IVideoSourceInternal {
+    internal var hkSurfaceView: MyRtmpSurfaceView? = null
     override val infoProviderFlow: StateFlow<ISourceInfoProvider> = MutableStateFlow(object : ISourceInfoProvider {
         override fun getSurfaceSize(targetResolution: android.util.Size): android.util.Size = targetResolution
         override val rotationDegrees: Int = 0
@@ -29,8 +30,7 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
     private var rtmpStreamSession: StreamSession? = null
 
     override suspend fun startStream() {
-// TODO: Need a different way to pass this
-//        hkSurfaceView?.dataSource = WeakReference(rtmpStreamSession?.stream)
+       hkSurfaceView?.dataSource = WeakReference(rtmpStreamSession?.stream)
 
         GlobalScope.launch {
             try {
@@ -136,6 +136,7 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
             StreamSession.Builder.registerFactory(com.haishinkit.rtmp.RtmpStreamSessionFactory)
             val session = StreamSession.Builder(context, uri).build()
             customSource.rtmpStreamSession = session
+            customSource.hkSurfaceView = hkSurfaceView
 
             return customSource
         }
