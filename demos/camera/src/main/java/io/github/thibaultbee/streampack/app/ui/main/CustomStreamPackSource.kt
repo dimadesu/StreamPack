@@ -18,10 +18,8 @@ import java.lang.ref.WeakReference
 import java.util.concurrent.LinkedBlockingQueue
 
 import io.github.thibaultbee.streampack.core.elements.sources.video.AbstractPreviewableSource
-import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoFrameSourceInternal
 
-class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
-    IVideoFrameSourceInternal {
+class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput, IVideoSourceInternal {
     override val infoProviderFlow: StateFlow<ISourceInfoProvider> = MutableStateFlow(object : ISourceInfoProvider {
         override fun getSurfaceSize(targetResolution: android.util.Size): android.util.Size = targetResolution
         override val rotationDegrees: Int = 0
@@ -122,7 +120,7 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
     }
 
     // AbstractPreviewableSource: deliver frames to StreamPack
-    override fun getVideoFrame(frameFactory: IReadOnlyRawFrameFactory): RawFrame {
+    fun getVideoFrame(frameFactory: IReadOnlyRawFrameFactory): RawFrame {
         val buffer = frameQueue.poll()
         android.util.Log.v("CustomStreamPackSource", "getVideoFrame: Called, queue size before poll: ${frameQueue.size + if (buffer != null) 1 else 0}")
         if (buffer != null) {
