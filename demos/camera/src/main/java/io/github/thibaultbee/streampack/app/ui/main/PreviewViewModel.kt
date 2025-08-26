@@ -322,7 +322,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     }
 
     @RequiresPermission(Manifest.permission.CAMERA)
-    fun toggleVideoSource(hkSurfaceView: com.haishinkit.view.HkSurfaceView? = null) {
+    fun toggleVideoSource(hkSurfaceView: MyRtmpSurfaceView? = null) {
         val videoSource = streamer.videoInput?.sourceFlow?.value
         viewModelScope.launch {
             val nextSource = when (videoSource) {

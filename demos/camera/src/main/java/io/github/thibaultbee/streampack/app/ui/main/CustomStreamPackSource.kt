@@ -163,7 +163,7 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
         frameQueue.clear()
     }
 
-    class Factory(private val hkSurfaceView: com.haishinkit.view.HkSurfaceView? = null) : IVideoSourceInternal.Factory {
+    class Factory(private val hkSurfaceView: MyRtmpSurfaceView? = null) : IVideoSourceInternal.Factory {
         override suspend fun create(context: Context): IVideoSourceInternal {
             val rtmpUrl = "rtmp://localhost:1935/publish/live" // TODO: Replace with your RTMP URL or pass as parameter
             val uri = android.net.Uri.parse(rtmpUrl)
@@ -172,9 +172,9 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
 
             val customSource = CustomStreamPackSourceInternal()
             customSource.rtmpStreamSession = session
-        android.util.Log.i("CustomStreamPackSource", "Attempting to register customSource as MediaOutput...")
-        session.stream.registerOutput(customSource)
-        android.util.Log.i("CustomStreamPackSource", "customSource registered as MediaOutput.")
+//        android.util.Log.i("CustomStreamPackSource", "Attempting to register customSource as MediaOutput...")
+//        session.stream.registerOutput(customSource)
+//        android.util.Log.i("CustomStreamPackSource", "customSource registered as MediaOutput.")
 
             // If a HkSurfaceView is provided, wire it to the RTMP stream for preview
             hkSurfaceView?.dataSource = WeakReference(session.stream)

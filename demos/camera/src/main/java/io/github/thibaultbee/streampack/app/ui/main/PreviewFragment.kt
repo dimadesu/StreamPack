@@ -43,17 +43,17 @@ import io.github.thibaultbee.streampack.ui.views.PreviewView
 import kotlinx.coroutines.launch
 
 class PreviewFragment : Fragment(R.layout.main_fragment) {
-    private var rtmpSurfaceView: com.haishinkit.view.HkSurfaceView? = null
+    private var rtmpSurfaceView: MyRtmpSurfaceView? = null
     private var rtmpStreamSession: com.haishinkit.stream.StreamSession? = null
     private lateinit var binding: MainFragmentBinding
 
     private fun showRtmpPreviewOverlay() {
         // Remove previous RTMP preview if exists
-        rtmpSurfaceView?.let { binding.previewContainer.removeView(it) }
+    rtmpSurfaceView?.let { binding.previewContainer.removeView(it) }
 
-        // Create and add RTMP preview overlay
-        rtmpSurfaceView = com.haishinkit.view.HkSurfaceView(requireContext())
-        binding.previewContainer.addView(rtmpSurfaceView)
+    // Create and add RTMP preview overlay
+    rtmpSurfaceView = MyRtmpSurfaceView(requireContext())
+    binding.previewContainer.addView(rtmpSurfaceView)
 
         // Build RTMP session for playback
         val rtmpUrl = "rtmp://localhost:1935/publish/live" // TODO: Replace with your RTMP URL
@@ -121,7 +121,7 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             rtmpSurfaceView?.let { binding.previewContainer.removeView(it) }
 
             // Create and add RTMP preview overlay
-            rtmpSurfaceView = com.haishinkit.view.HkSurfaceView(requireContext())
+            rtmpSurfaceView = MyRtmpSurfaceView(requireContext())
             binding.previewContainer.addView(rtmpSurfaceView)
 
             previewViewModel.toggleVideoSource(rtmpSurfaceView)
