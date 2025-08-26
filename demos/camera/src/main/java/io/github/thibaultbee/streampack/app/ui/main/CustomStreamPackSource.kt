@@ -88,13 +88,27 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
     override val isPreviewingFlow: StateFlow<Boolean>
         get() = _isPreviewingFlow
 
+    private var outputSurface: android.view.Surface? = null
+
     override suspend fun getOutput(): android.view.Surface? {
-        // RTMP source does not use output surface
-        return null
+        return outputSurface
     }
 
     override suspend fun setOutput(surface: android.view.Surface) {
-        // RTMP source does not use output surface
+        outputSurface = surface
+        // Wire the surface to HaishinKit RTMP session for playback
+        rtmpStreamSession?.stream?.let { stream ->
+            // If HaishinKit expects a surface for rendering, set it here
+            // Example: stream.surface = surface (actual property may differ)
+            try {
+                val surfaceField = stream.javaClass.getDeclaredField("surface")
+                surfaceField.isAccessible = true
+                surfaceField.set(stream, surface)
+                android.util.Log.i("CustomStreamPackSource", "Output surface set for RTMP stream.")
+            } catch (e: Exception) {
+                android.util.Log.e("CustomStreamPackSource", "Failed to set output surface: ${e.message}", e)
+            }
+        }
     }
 
     override suspend fun hasPreview(): Boolean {
