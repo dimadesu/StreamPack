@@ -110,21 +110,41 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
 
     // MediaOutput: called by RTMP pipeline
     override fun append(buffer: MediaBuffer) {
-        // Enqueue the incoming frame for later delivery
-        frameQueue.offer(buffer)
+        android.util.Log.v("CustomStreamPackSource", "append: Called, queue size before offer: ${frameQueue.size}")
+        android.util.Log.v("CustomStreamPackSource", "append: Buffer info: timestamp=${buffer.timestamp}, payload type=${buffer.payload?.javaClass?.name}")
+        val payloadSize = (buffer.payload as? ByteArray)?.size ?: -1
+        android.util.Log.d("CustomStreamPackSource", "append: Received RTMP frame, size=$payloadSize, timestamp=${buffer.timestamp}")
+        val offered = frameQueue.offer(buffer)
+        if (!offered) {
+            android.util.Log.w("CustomStreamPackSource", "append: Frame queue full, dropping frame")
+        }
+        android.util.Log.v("CustomStreamPackSource", "append: Queue size after offer: ${frameQueue.size}")
     }
 
     // AbstractPreviewableSource: deliver frames to StreamPack
     override fun getVideoFrame(frameFactory: IReadOnlyRawFrameFactory): RawFrame {
         val buffer = frameQueue.poll()
-        return if (buffer != null && buffer.payload != null) {
-            RawFrame(
-                rawBuffer = buffer.payload!!,
-                timestampInUs = buffer.timestamp
-            )
+        android.util.Log.v("CustomStreamPackSource", "getVideoFrame: Called, queue size before poll: ${frameQueue.size + if (buffer != null) 1 else 0}")
+        if (buffer != null) {
+            android.util.Log.v("CustomStreamPackSource", "getVideoFrame: Polled buffer: timestamp=${buffer.timestamp}, payload type=${buffer.payload?.javaClass?.name}")
+            if (buffer.payload != null) {
+                val payloadSize = (buffer.payload as? ByteArray)?.size ?: -1
+                android.util.Log.d("CustomStreamPackSource", "getVideoFrame: Consuming frame, size=$payloadSize, timestamp=${buffer.timestamp}, queue size=${frameQueue.size}")
+                val frame = RawFrame(
+                    rawBuffer = buffer.payload!!,
+                    timestampInUs = buffer.timestamp
+                )
+                android.util.Log.v("CustomStreamPackSource", "getVideoFrame: Created RawFrame: buffer size=$payloadSize, timestamp=${frame.timestampInUs}")
+                return frame
+            } else {
+                android.util.Log.w("CustomStreamPackSource", "getVideoFrame: Frame payload is null, buffer timestamp=${buffer.timestamp}")
+            }
         } else {
-            frameFactory.create(0, 0L)
+            android.util.Log.d("CustomStreamPackSource", "getVideoFrame: No frame available in queue")
         }
+        val fallbackFrame = frameFactory.create(0, 0L)
+        android.util.Log.v("CustomStreamPackSource", "getVideoFrame: Returning fallback frame, timestamp=${fallbackFrame.timestampInUs}")
+        return fallbackFrame
     }
 
     // AbstractPreviewableSource: implement preview reset logic
