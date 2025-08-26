@@ -45,6 +45,8 @@ import kotlinx.coroutines.launch
 class PreviewFragment : Fragment(R.layout.main_fragment) {
     private var rtmpSurfaceView: com.haishinkit.view.HkSurfaceView? = null
     private var rtmpStreamSession: com.haishinkit.stream.StreamSession? = null
+    private lateinit var binding: MainFragmentBinding
+
     private fun showRtmpPreviewOverlay() {
         // Remove previous RTMP preview if exists
         rtmpSurfaceView?.let { binding.previewContainer.removeView(it) }
@@ -86,7 +88,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             }
         }
     }
-    private lateinit var binding: MainFragmentBinding
 
     private val previewViewModel: PreviewViewModel by viewModels {
         PreviewViewModelFactory(requireActivity().application)
@@ -115,6 +116,16 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
 
     @SuppressLint("MissingPermission")
     private fun bindProperties() {
+        binding.switchSourceButton.setOnClickListener {
+            // Remove previous RTMP preview if exists
+            rtmpSurfaceView?.let { binding.previewContainer.removeView(it) }
+
+            // Create and add RTMP preview overlay
+            rtmpSurfaceView = com.haishinkit.view.HkSurfaceView(requireContext())
+            binding.previewContainer.addView(rtmpSurfaceView)
+
+            previewViewModel.toggleVideoSource(rtmpSurfaceView)
+        }
         binding.toggleRtmpPreviewButton.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
                 showRtmpPreviewOverlay()

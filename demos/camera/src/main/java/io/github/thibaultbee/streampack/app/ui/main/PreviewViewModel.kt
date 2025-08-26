@@ -322,23 +322,19 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     }
 
     @RequiresPermission(Manifest.permission.CAMERA)
-    fun toggleVideoSource() {
+    fun toggleVideoSource(hkSurfaceView: com.haishinkit.view.HkSurfaceView? = null) {
         val videoSource = streamer.videoInput?.sourceFlow?.value
         viewModelScope.launch {
             val nextSource = when (videoSource) {
                 is ICameraSource -> {
-//                    BitmapSourceFactory(testBitmap)
-                    CustomStreamPackSourceInternal.Factory()
+                    CustomStreamPackSourceInternal.Factory(hkSurfaceView)
                 }
-
                 is IBitmapSource -> {
                     CameraSourceFactory()
                 }
-
                 is CustomStreamPackSourceInternal -> {
                     CameraSourceFactory()
                 }
-
                 else -> {
                     Log.i(TAG, "Unknown video source. Fallback to camera sources")
                     CameraSourceFactory()
