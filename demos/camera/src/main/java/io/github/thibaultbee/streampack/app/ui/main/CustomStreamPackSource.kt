@@ -5,17 +5,14 @@ import com.haishinkit.media.MediaBuffer
 import com.haishinkit.media.MediaOutput
 import com.haishinkit.media.MediaOutputDataSource
 import com.haishinkit.stream.StreamSession
-import io.github.thibaultbee.streampack.core.elements.data.RawFrame
 import io.github.thibaultbee.streampack.core.elements.processing.video.source.ISourceInfoProvider
 import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoSourceInternal
 import io.github.thibaultbee.streampack.core.elements.sources.video.VideoSourceConfig
-import io.github.thibaultbee.streampack.core.elements.utils.pool.IReadOnlyRawFrameFactory
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.lang.ref.WeakReference
-import java.util.concurrent.LinkedBlockingQueue
 
 import io.github.thibaultbee.streampack.core.elements.sources.video.AbstractPreviewableSource
 
@@ -33,26 +30,6 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
 
     override suspend fun startStream() {
         _isStreamingFlow.value = true
-        // Start consuming frames from the queue and deliver to StreamPack
-        GlobalScope.launch {
-            while (_isStreamingFlow.value) {
-                val buffer = frameQueue.poll()
-                android.util.Log.v("CustomStreamPackSource", "startStream: Polled buffer: timestamp=${buffer?.timestamp}, payload type=${buffer?.payload?.javaClass?.name}")
-                if (buffer != null && buffer.payload != null) {
-                    val payloadSize = (buffer.payload as? ByteArray)?.size ?: -1
-                    android.util.Log.d("CustomStreamPackSource", "startStream: Consuming frame, size=$payloadSize, timestamp=${buffer.timestamp}, queue size=${frameQueue.size}")
-                    val frame = RawFrame(
-                        rawBuffer = buffer.payload!!,
-                        timestampInUs = buffer.timestamp
-                    )
-                    // Deliver frame to StreamPack pipeline (implement your delivery logic here)
-                    // For example: onFrameAvailable(frame)
-                } else {
-                    android.util.Log.d("CustomStreamPackSource", "startStream: No frame available or payload is null")
-                }
-                kotlinx.coroutines.delay(10) // Prevent busy loop
-            }
-        }
     }
 
     override suspend fun stopStream() {
@@ -70,12 +47,7 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
             }
         }
         rtmpStreamSession = null
-        frameQueue.clear()
     }
-
-
-    // Buffer to store incoming RTMP frames
-    private val frameQueue: LinkedBlockingQueue<MediaBuffer> = LinkedBlockingQueue()
 
     // MediaOutput interface requirement
     override var dataSource: WeakReference<MediaOutputDataSource>? = null
@@ -129,15 +101,7 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
 
     // MediaOutput: called by RTMP pipeline
     override fun append(buffer: MediaBuffer) {
-        android.util.Log.v("CustomStreamPackSource", "append: Called, queue size before offer: ${frameQueue.size}")
-        android.util.Log.v("CustomStreamPackSource", "append: Buffer info: timestamp=${buffer.timestamp}, payload type=${buffer.payload?.javaClass?.name}")
-        val payloadSize = (buffer.payload as? ByteArray)?.size ?: -1
-        android.util.Log.d("CustomStreamPackSource", "append: Received RTMP frame, size=$payloadSize, timestamp=${buffer.timestamp}")
-        val offered = frameQueue.offer(buffer)
-        if (!offered) {
-            android.util.Log.w("CustomStreamPackSource", "append: Frame queue full, dropping frame")
-        }
-        android.util.Log.v("CustomStreamPackSource", "append: Queue size after offer: ${frameQueue.size}")
+        android.util.Log.v("CustomStreamPackSource", "append: Buffer info: buffer=${buffer}")
     }
 
     // AbstractPreviewableSource: implement preview reset logic
@@ -147,7 +111,6 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
 
     // AbstractPreviewableSource: implement output reset logic
     override suspend fun resetOutputImpl() {
-        frameQueue.clear()
     }
 
     class Factory(private val hkSurfaceView: MyRtmpSurfaceView? = null) : IVideoSourceInternal.Factory {

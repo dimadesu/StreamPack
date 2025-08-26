@@ -1,6 +1,9 @@
 package io.github.thibaultbee.streampack.core.elements.processing.video
 
 import android.graphics.SurfaceTexture
+import android.content.Context
+import android.view.ViewGroup
+import com.haishinkit.view.HkSurfaceView
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Size
@@ -15,7 +18,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 
 private class DefaultSurfaceProcessor2(
-    private val dynamicRangeProfile: DynamicRangeProfile
+    private val dynamicRangeProfile: DynamicRangeProfile,
+    private val context: Context,
 ) : ISurfaceProcessorInternal, SurfaceTexture.OnFrameAvailableListener {
     private val renderer = OpenGlRenderer()
 
@@ -53,15 +57,30 @@ private class DefaultSurfaceProcessor2(
         }
 
         val future = submitSafely {
-            val surfaceTexture = SurfaceTexture(renderer.textureName)
-            surfaceTexture.setDefaultBufferSize(surfaceSize.width, surfaceSize.height)
-            surfaceTexture.setOnFrameAvailableListener(this, glHandler)
-            if (dynamicRangeProfile.isHdr) {
-                renderer.setInputFormat(GLUtils.InputFormat.YUV)
-            }
+            //
+            // Original surface
+            //
 
-            surfaceInputsTimestampInNsMap[surfaceTexture] = timestampOffsetInNs
-            SurfaceInput(Surface(surfaceTexture), surfaceTexture)
+            // val surfaceTexture = SurfaceTexture(renderer.textureName)
+            // surfaceTexture.setDefaultBufferSize(surfaceSize.width, surfaceSize.height)
+            // surfaceTexture.setOnFrameAvailableListener(this, glHandler)
+            // if (dynamicRangeProfile.isHdr) {
+            //     renderer.setInputFormat(GLUtils.InputFormat.YUV)
+            // }
+
+            // surfaceInputsTimestampInNsMap[surfaceTexture] = timestampOffsetInNs
+
+            // SurfaceInput(Surface(surfaceTexture), surfaceTexture)
+
+
+            //
+            // Haishin Kit surface
+            //
+            val hkSurfaceView = HkSurfaceView(context)
+            hkSurfaceView.layoutParams = ViewGroup.LayoutParams(surfaceSize.width, surfaceSize.height)
+            val hkSurface = hkSurfaceView.holder.surface
+            
+            SurfaceInput(hkSurface, null)
         }
 
         val surfaceInput = future.get()
@@ -74,8 +93,8 @@ private class DefaultSurfaceProcessor2(
             val surfaceInput = surfaceInputs.find { it.surface == surface }
             if (surfaceInput != null) {
                 val surfaceTexture = surfaceInput.surfaceTexture
-                surfaceTexture.setOnFrameAvailableListener(null, glHandler)
-                surfaceTexture.release()
+                surfaceTexture?.setOnFrameAvailableListener(null, glHandler)
+                surfaceTexture?.release()
                 surface.release()
 
                 surfaceInputsTimestampInNsMap.remove(surfaceTexture)
@@ -242,11 +261,11 @@ private class DefaultSurfaceProcessor2(
         private const val TAG = "SurfaceProcessor"
     }
 
-    private data class SurfaceInput(val surface: Surface, val surfaceTexture: SurfaceTexture)
+    private data class SurfaceInput(val surface: Surface, val surfaceTexture: SurfaceTexture?)
 }
 
 class DefaultSurfaceProcessorFactory2 : ISurfaceProcessorInternal.Factory {
-    override fun create(dynamicRangeProfile: DynamicRangeProfile): ISurfaceProcessorInternal {
-        return DefaultSurfaceProcessor2(dynamicRangeProfile)
+    override fun create(dynamicRangeProfile: DynamicRangeProfile, context: Context): ISurfaceProcessorInternal {
+        return DefaultSurfaceProcessor2(dynamicRangeProfile, context)
     }
 }

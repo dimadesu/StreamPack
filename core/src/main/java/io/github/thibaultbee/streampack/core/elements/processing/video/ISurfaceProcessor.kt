@@ -15,6 +15,7 @@
  */
 package io.github.thibaultbee.streampack.core.elements.processing.video
 
+import android.content.Context
 import android.util.Size
 import android.view.Surface
 import io.github.thibaultbee.streampack.core.elements.interfaces.Releasable
@@ -48,6 +49,6 @@ interface ISurfaceProcessorInternal : ISurfaceProcessor, Releasable {
      * Factory interface for creating instances of [ISurfaceProcessorInternal].
      */
     interface Factory {
-        fun create(dynamicRangeProfile: DynamicRangeProfile): ISurfaceProcessorInternal
+        fun create(dynamicRangeProfile: DynamicRangeProfile, context: Context): ISurfaceProcessorInternal
     }
 }

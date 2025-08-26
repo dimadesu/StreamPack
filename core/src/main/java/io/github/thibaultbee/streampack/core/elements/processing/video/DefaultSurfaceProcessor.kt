@@ -1,5 +1,6 @@
 package io.github.thibaultbee.streampack.core.elements.processing.video
 
+import android.content.Context
 import android.graphics.SurfaceTexture
 import android.os.Handler
 import android.os.HandlerThread
@@ -246,7 +247,7 @@ private class DefaultSurfaceProcessor(
 }
 
 class DefaultSurfaceProcessorFactory : ISurfaceProcessorInternal.Factory {
-    override fun create(dynamicRangeProfile: DynamicRangeProfile): ISurfaceProcessorInternal {
+    override fun create(dynamicRangeProfile: DynamicRangeProfile, context: Context): ISurfaceProcessorInternal {
         return DefaultSurfaceProcessor(dynamicRangeProfile)
     }
 }

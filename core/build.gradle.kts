@@ -29,6 +29,11 @@ dependencies {
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
+    
+    implementation("com.github.HaishinKit.HaishinKit~kt:haishinkit:0.16.0")
+    implementation("com.github.HaishinKit.HaishinKit~kt:rtmp:0.16.0")
+    implementation("com.github.HaishinKit.HaishinKit~kt:compose:0.16.0")
+    implementation("com.github.HaishinKit.HaishinKit~kt:lottie:0.16.0")
 
     androidTestImplementation(libs.androidx.test.core.ktx)
     androidTestImplementation(libs.androidx.test.rules)
