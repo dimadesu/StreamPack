@@ -89,6 +89,7 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
         get() = _isPreviewingFlow
 
     private var outputSurface: android.view.Surface? = null
+    internal var hkSurfaceView: MyRtmpSurfaceView? = null
     override suspend fun getOutput(): android.view.Surface? {
         return outputSurface
     }
@@ -96,18 +97,28 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
     override suspend fun setOutput(surface: android.view.Surface) {
         // TODO
 //        outputSurface = surface
+
+            if (hkSurfaceView != null) {
+                outputSurface = hkSurfaceView!!.getSurface()
+                android.util.Log.i("CustomStreamPackSource", "hkPreviewSurface set from hkSurfaceView.getSurface(): ${outputSurface}")
+            }
+
+// TODO
         // Wire the surface to HaishinKit RTMP session for playback
         rtmpStreamSession?.stream?.let { stream ->
             // If HaishinKit expects a surface for rendering, set it here
             // Example: stream.surface = surface (actual property may differ)
-            try {
-                val surfaceField = stream.javaClass.getDeclaredField("surface")
-                surfaceField.isAccessible = true
-                surfaceField.set(stream, surface)
-                android.util.Log.i("CustomStreamPackSource", "Output surface set for RTMP stream.")
-            } catch (e: Exception) {
-                android.util.Log.e("CustomStreamPackSource", "Failed to set output surface: ${e.message}", e)
-            }
+
+
+
+            // try {
+            //     val surfaceField = stream.javaClass.getDeclaredField("surface")
+            //     surfaceField.isAccessible = true
+            //     surfaceField.set(stream, surface)
+            //     android.util.Log.i("CustomStreamPackSource", "Output surface set for RTMP stream.")
+            // } catch (e: Exception) {
+            //     android.util.Log.e("CustomStreamPackSource", "Failed to set output surface: ${e.message}", e)
+            // }
         }
     }
 
@@ -172,16 +183,13 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
 
             val customSource = CustomStreamPackSourceInternal()
             customSource.rtmpStreamSession = session
+            customSource.hkSurfaceView = hkSurfaceView
 //        android.util.Log.i("CustomStreamPackSource", "Attempting to register customSource as MediaOutput...")
 //        session.stream.registerOutput(customSource)
 //        android.util.Log.i("CustomStreamPackSource", "customSource registered as MediaOutput.")
 
             // If a HkSurfaceView is provided, wire it to the RTMP stream for preview
             hkSurfaceView?.dataSource = WeakReference(session.stream)
-            if (hkSurfaceView != null) {
-                customSource.outputSurface = hkSurfaceView.getSurface()
-                android.util.Log.i("CustomStreamPackSource", "hkPreviewSurface set from hkSurfaceView.getSurface(): ${customSource.outputSurface}")
-            }
 
             GlobalScope.launch {
                 try {
