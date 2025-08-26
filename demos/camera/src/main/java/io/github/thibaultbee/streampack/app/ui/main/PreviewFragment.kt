@@ -1,3 +1,4 @@
+
 /*
  * Copyright (C) 2021 Thibault B.
  *
@@ -42,6 +43,49 @@ import io.github.thibaultbee.streampack.ui.views.PreviewView
 import kotlinx.coroutines.launch
 
 class PreviewFragment : Fragment(R.layout.main_fragment) {
+    private var rtmpSurfaceView: com.haishinkit.view.HkSurfaceView? = null
+    private var rtmpStreamSession: com.haishinkit.stream.StreamSession? = null
+    private fun showRtmpPreviewOverlay() {
+        // Remove previous RTMP preview if exists
+        rtmpSurfaceView?.let { binding.previewContainer.removeView(it) }
+
+        // Create and add RTMP preview overlay
+        rtmpSurfaceView = com.haishinkit.view.HkSurfaceView(requireContext())
+        binding.previewContainer.addView(rtmpSurfaceView)
+
+        // Build RTMP session for playback
+        val rtmpUrl = "rtmp://localhost:1935/publish/live" // TODO: Replace with your RTMP URL
+        val uri = android.net.Uri.parse(rtmpUrl)
+        com.haishinkit.stream.StreamSession.Builder.registerFactory(com.haishinkit.rtmp.RtmpStreamSessionFactory)
+        rtmpStreamSession = com.haishinkit.stream.StreamSession.Builder(requireContext(), uri).build()
+        rtmpSurfaceView?.dataSource = rtmpStreamSession?.stream?.let { java.lang.ref.WeakReference(it) }
+
+        // Start playback
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val result = rtmpStreamSession?.connect(com.haishinkit.stream.StreamSession.Method.PLAYBACK)
+                if (result == null || result.isFailure) {
+                    android.util.Log.e("PreviewFragment", "RTMP playback failed: ${result?.exceptionOrNull()?.message}")
+                    requireActivity().runOnUiThread {
+                        android.widget.Toast.makeText(
+                            requireContext(),
+                            "RTMP playback failed: ${result?.exceptionOrNull()?.message ?: "Unknown error"}",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("PreviewFragment", "RTMP playback exception: ${e.message}", e)
+                requireActivity().runOnUiThread {
+                    android.widget.Toast.makeText(
+                        requireContext(),
+                        "RTMP playback exception: ${e.message}",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
     private lateinit var binding: MainFragmentBinding
 
     private val previewViewModel: PreviewViewModel by viewModels {
@@ -61,6 +105,9 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
 
     @SuppressLint("MissingPermission")
     private fun bindProperties() {
+        binding.showRtmpPreviewButton.setOnClickListener {
+            showRtmpPreviewOverlay()
+        }
         binding.liveButton.setOnClickListener { view ->
             view as ToggleButton
             if (view.isPressed) {
