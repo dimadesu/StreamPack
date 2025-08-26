@@ -21,7 +21,7 @@ import io.github.thibaultbee.streampack.core.elements.data.ICloseableFrame
 import io.github.thibaultbee.streampack.core.elements.data.RawFrame
 import io.github.thibaultbee.streampack.core.elements.endpoints.DynamicEndpointFactory
 import io.github.thibaultbee.streampack.core.elements.endpoints.IEndpointInternal
-import io.github.thibaultbee.streampack.core.elements.processing.video.DefaultSurfaceProcessorFactory
+import io.github.thibaultbee.streampack.core.elements.processing.video.DefaultSurfaceProcessorFactory2
 import io.github.thibaultbee.streampack.core.elements.processing.video.ISurfaceProcessorInternal
 import io.github.thibaultbee.streampack.core.elements.processing.video.outputs.AspectRatioMode
 import io.github.thibaultbee.streampack.core.elements.processing.video.outputs.ISurfaceOutput
@@ -90,7 +90,7 @@ open class StreamerPipeline(
     val withAudio: Boolean = true,
     val withVideo: Boolean = true,
     private val audioOutputMode: AudioOutputMode = AudioOutputMode.PUSH,
-    surfaceProcessorFactory: ISurfaceProcessorInternal.Factory = DefaultSurfaceProcessorFactory(),
+    surfaceProcessorFactory: ISurfaceProcessorInternal.Factory = DefaultSurfaceProcessorFactory2(),
     protected val coroutineDispatcher: CoroutineDispatcher = Dispatchers.Default
 ) : IWithVideoSource, IWithVideoRotation, IWithAudioSource, IStreamer {
     private val coroutineScope: CoroutineScope = CoroutineScope(coroutineDispatcher)
