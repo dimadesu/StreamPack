@@ -42,7 +42,7 @@ class MyRtmpSurfaceView @JvmOverloads constructor(
         get() = pixelTransform.videoEffect
         set(value) { pixelTransform.videoEffect = value }
 
-    val pixelTransform: PixelTransform by lazy { PixelTransform.create(context) }
+    private val pixelTransform: PixelTransform by lazy { PixelTransform.create(context) }
 
     init {
         holder.addCallback(object : SurfaceHolder.Callback {
@@ -66,10 +66,10 @@ class MyRtmpSurfaceView @JvmOverloads constructor(
     fun getSurface(): Surface? {
         return holder.surface
     }
-
-//    fun setSurface(): Surface? {
-//        return holder.surface =
-//    }
+    
+    fun setSurface(surface: Surface) {
+        pixelTransform.surface = surface
+    }
 
     fun append(buffer: MediaBuffer) {
         // Implement frame rendering if needed
