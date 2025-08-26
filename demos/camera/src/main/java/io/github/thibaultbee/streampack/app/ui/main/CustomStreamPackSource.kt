@@ -30,18 +30,6 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
     private var rtmpStreamSession: StreamSession? = null
 
     override suspend fun startStream() {
-       hkSurfaceView?.dataSource = WeakReference(rtmpStreamSession?.stream)
-
-        GlobalScope.launch {
-            try {
-                val result = rtmpStreamSession?.connect(StreamSession.Method.PLAYBACK)
-                if (result == null || result.isFailure) {
-                    android.util.Log.e("CustomStreamPackSource", "RTMP playback failed: ${result?.exceptionOrNull()?.message}")
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("CustomStreamPackSource", "RTMP playback exception: ${e.message}", e)
-            }
-        }
 
         _isStreamingFlow.value = true
     }
@@ -137,6 +125,20 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
             val session = StreamSession.Builder(context, uri).build()
             customSource.rtmpStreamSession = session
             customSource.hkSurfaceView = hkSurfaceView
+
+
+            hkSurfaceView?.dataSource = WeakReference(session.stream)
+
+            GlobalScope.launch {
+                try {
+                    val result = session.connect(StreamSession.Method.PLAYBACK)
+                    if (result == null || result.isFailure) {
+                        android.util.Log.e("CustomStreamPackSource", "RTMP playback failed: ${result?.exceptionOrNull()?.message}")
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("CustomStreamPackSource", "RTMP playback exception: ${e.message}", e)
+                }
+            }
 
             return customSource
         }
