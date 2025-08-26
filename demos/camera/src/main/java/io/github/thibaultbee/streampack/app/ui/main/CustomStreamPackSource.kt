@@ -33,6 +33,26 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
 
     override suspend fun startStream() {
         _isStreamingFlow.value = true
+        // Start consuming frames from the queue and deliver to StreamPack
+        GlobalScope.launch {
+            while (_isStreamingFlow.value) {
+                val buffer = frameQueue.poll()
+                android.util.Log.v("CustomStreamPackSource", "startStream: Polled buffer: timestamp=${buffer?.timestamp}, payload type=${buffer?.payload?.javaClass?.name}")
+                if (buffer != null && buffer.payload != null) {
+                    val payloadSize = (buffer.payload as? ByteArray)?.size ?: -1
+                    android.util.Log.d("CustomStreamPackSource", "startStream: Consuming frame, size=$payloadSize, timestamp=${buffer.timestamp}, queue size=${frameQueue.size}")
+                    val frame = RawFrame(
+                        rawBuffer = buffer.payload!!,
+                        timestampInUs = buffer.timestamp
+                    )
+                    // Deliver frame to StreamPack pipeline (implement your delivery logic here)
+                    // For example: onFrameAvailable(frame)
+                } else {
+                    android.util.Log.d("CustomStreamPackSource", "startStream: No frame available or payload is null")
+                }
+                kotlinx.coroutines.delay(10) // Prevent busy loop
+            }
+        }
     }
 
     override suspend fun stopStream() {
@@ -119,32 +139,6 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
         android.util.Log.v("CustomStreamPackSource", "append: Queue size after offer: ${frameQueue.size}")
     }
 
-    // AbstractPreviewableSource: deliver frames to StreamPack
-    fun getVideoFrame(frameFactory: IReadOnlyRawFrameFactory): RawFrame {
-        val buffer = frameQueue.poll()
-        android.util.Log.v("CustomStreamPackSource", "getVideoFrame: Called, queue size before poll: ${frameQueue.size + if (buffer != null) 1 else 0}")
-        if (buffer != null) {
-            android.util.Log.v("CustomStreamPackSource", "getVideoFrame: Polled buffer: timestamp=${buffer.timestamp}, payload type=${buffer.payload?.javaClass?.name}")
-            if (buffer.payload != null) {
-                val payloadSize = (buffer.payload as? ByteArray)?.size ?: -1
-                android.util.Log.d("CustomStreamPackSource", "getVideoFrame: Consuming frame, size=$payloadSize, timestamp=${buffer.timestamp}, queue size=${frameQueue.size}")
-                val frame = RawFrame(
-                    rawBuffer = buffer.payload!!,
-                    timestampInUs = buffer.timestamp
-                )
-                android.util.Log.v("CustomStreamPackSource", "getVideoFrame: Created RawFrame: buffer size=$payloadSize, timestamp=${frame.timestampInUs}")
-                return frame
-            } else {
-                android.util.Log.w("CustomStreamPackSource", "getVideoFrame: Frame payload is null, buffer timestamp=${buffer.timestamp}")
-            }
-        } else {
-            android.util.Log.d("CustomStreamPackSource", "getVideoFrame: No frame available in queue")
-        }
-        val fallbackFrame = frameFactory.create(0, 0L)
-        android.util.Log.v("CustomStreamPackSource", "getVideoFrame: Returning fallback frame, timestamp=${fallbackFrame.timestampInUs}")
-        return fallbackFrame
-    }
-
     // AbstractPreviewableSource: implement preview reset logic
     override suspend fun resetPreviewImpl() {
         // No-op for RTMP source, unless preview surface needs to be reset
@@ -164,7 +158,9 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
 
             val customSource = CustomStreamPackSourceInternal()
             customSource.rtmpStreamSession = session
-            session.stream.registerOutput(customSource)
+        android.util.Log.i("CustomStreamPackSource", "Attempting to register customSource as MediaOutput...")
+        session.stream.registerOutput(customSource)
+        android.util.Log.i("CustomStreamPackSource", "customSource registered as MediaOutput.")
 
             // If a HkSurfaceView is provided, wire it to the RTMP stream for preview
             hkSurfaceView?.dataSource = WeakReference(session.stream)
