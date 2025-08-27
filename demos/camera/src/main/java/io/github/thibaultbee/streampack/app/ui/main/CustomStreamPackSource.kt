@@ -1,6 +1,9 @@
 package io.github.thibaultbee.streampack.app.ui.main
 
 import android.content.Context
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import io.github.thibaultbee.streampack.core.elements.processing.video.source.ISourceInfoProvider
 import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoSourceInternal
 import io.github.thibaultbee.streampack.core.elements.sources.video.VideoSourceConfig
@@ -17,8 +20,11 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), IVideoSource
     })
     private val _isStreamingFlow = MutableStateFlow(false)
     override val isStreamingFlow: StateFlow<Boolean> get() = _isStreamingFlow
+    private var exoPlayer: ExoPlayer? = null
 
     override suspend fun startStream() {
+        exoPlayer?.prepare()
+        exoPlayer?.playWhenReady = true
         _isStreamingFlow.value = true
     }
 
@@ -30,6 +36,8 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), IVideoSource
     }
 
     override fun release() {
+        exoPlayer?.release()
+        exoPlayer = null
     }
 
     // AbstractPreviewableSource required members (stubbed for RTMP source)
@@ -48,6 +56,7 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), IVideoSource
 
     override suspend fun setOutput(surface: android.view.Surface) {
         outputSurface = surface
+        exoPlayer?.setVideoSurface(surface)
     }
 
     override suspend fun hasPreview(): Boolean {
@@ -81,7 +90,25 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), IVideoSource
 
     class Factory() : IVideoSourceInternal.Factory {
         override suspend fun create(context: Context): IVideoSourceInternal {
-            return CustomStreamPackSourceInternal()
+
+            val customSrc = CustomStreamPackSourceInternal()
+
+            val exoPlayer = ExoPlayer.Builder(context).build()
+
+            val rtmpUrl = "rtmp://localhost:1935/publish/live"
+            val mediaItem = MediaItem.fromUri(rtmpUrl)
+            val mediaSource = ProgressiveMediaSource.Factory(
+                try {
+                    androidx.media3.datasource.rtmp.RtmpDataSource.Factory()
+                } catch (e: Exception) {
+                    androidx.media3.datasource.DefaultDataSource.Factory(context)
+                }
+            ).createMediaSource(mediaItem)
+            exoPlayer?.setMediaSource(mediaSource)
+
+            customSrc.exoPlayer = exoPlayer
+
+            return customSrc
         }
 
         override fun isSourceEquals(source: IVideoSourceInternal?): Boolean {
