@@ -1,6 +1,8 @@
 package io.github.thibaultbee.streampack.app.ui.main
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
@@ -40,8 +42,15 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), IVideoSource
     }
 
     override fun release() {
-        exoPlayer?.release()
-        exoPlayer = null
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            exoPlayer?.release()
+            exoPlayer = null
+        } else {
+            Handler(Looper.getMainLooper()).post {
+                exoPlayer?.release()
+                exoPlayer = null
+            }
+        }
     }
 
     // AbstractPreviewableSource required members (stubbed for RTMP source)
