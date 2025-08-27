@@ -47,6 +47,37 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
     private val previewViewModel: PreviewViewModel by viewModels {
         PreviewViewModelFactory(requireActivity().application)
     }
+    private var rtmpPlayer: androidx.media3.exoplayer.ExoPlayer? = null
+
+    private fun playRtmpStream() {
+        val rtmpUrl = "rtmp://localhost:1935/publish/live" // TODO: Replace with your RTMP URL
+        val playerView = binding.rtmpPlayerView
+        playerView.visibility = View.VISIBLE
+
+        // Create ExoPlayer
+        rtmpPlayer?.release()
+        rtmpPlayer = androidx.media3.exoplayer.ExoPlayer.Builder(requireContext()).build()
+        playerView.player = rtmpPlayer
+
+        // Use RTMPDataSourceFactory if available, else default
+        val mediaItem = androidx.media3.common.MediaItem.fromUri(rtmpUrl)
+        val mediaSource = androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(
+            try {
+                androidx.media3.datasource.rtmp.RtmpDataSource.Factory()
+            } catch (e: Exception) {
+                androidx.media3.datasource.DefaultDataSource.Factory(requireContext())
+            }
+        ).createMediaSource(mediaItem)
+
+        rtmpPlayer?.setMediaSource(mediaSource)
+        rtmpPlayer?.prepare()
+        rtmpPlayer?.playWhenReady = true
+    }
+    override fun onDestroyView() {
+        super.onDestroyView()
+        rtmpPlayer?.release()
+        rtmpPlayer = null
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -70,6 +101,11 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                     stopStream()
                 }
             }
+        }
+
+        // Play RTMP button wiring
+        binding.playRtmpButton.setOnClickListener {
+            playRtmpStream()
         }
 
         previewViewModel.streamerErrorLiveData.observe(viewLifecycleOwner) {

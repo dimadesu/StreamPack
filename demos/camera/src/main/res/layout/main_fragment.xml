@@ -67,6 +67,27 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent" />
 
+        <!-- New button to play RTMP stream -->
+        <Button
+            android:id="@+id/playRtmpButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Play RTMP"
+            app:layout_constraintBottom_toTopOf="@id/liveButton"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent" />
+
+        <!-- ExoPlayer PlayerView for RTMP playback -->
+        <androidx.media3.ui.PlayerView
+            android:id="@+id/rtmpPlayerView"
+            android:layout_width="match_parent"
+            android:layout_height="200dp"
+            android:visibility="gone"
+            app:layout_constraintBottom_toTopOf="@id/playRtmpButton"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
         <LinearLayout
             android:layout_width="200dp"
             android:layout_height="wrap_content"
