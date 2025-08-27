@@ -30,7 +30,7 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
     private var rtmpStreamSession: StreamSession? = null
 
     override suspend fun startStream() {
-
+        rtmpStreamSession?.stream?.onSurfaceChanged(outputSurface)
         _isStreamingFlow.value = true
     }
 
@@ -70,7 +70,7 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
     override suspend fun setOutput(surface: android.view.Surface) {
         outputSurface = surface
 //        hkSurfaceView?.pixelTransform?.surface = surface
-        hkSurfaceView?.setSurface(surface)
+//        hkSurfaceView?.setSurface(surface)
     }
 
     override suspend fun hasPreview(): Boolean {
@@ -128,8 +128,11 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
             customSource.rtmpStreamSession = session
             customSource.hkSurfaceView = hkSurfaceView
 
+            // TODO What does this do?
+            customSource.dataSource = WeakReference(session.stream)
 
-            hkSurfaceView?.dataSource = WeakReference(session.stream)
+
+//            hkSurfaceView?.dataSource = WeakReference(session.stream)
 
             GlobalScope.launch {
                 try {
