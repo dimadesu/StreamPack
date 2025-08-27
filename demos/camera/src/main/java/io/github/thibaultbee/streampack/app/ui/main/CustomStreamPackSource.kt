@@ -1,9 +1,6 @@
 package io.github.thibaultbee.streampack.app.ui.main
 
 import android.content.Context
-import com.haishinkit.media.MediaBuffer
-import com.haishinkit.media.MediaOutput
-import com.haishinkit.media.MediaOutputDataSource
 import com.haishinkit.stream.StreamSession
 import io.github.thibaultbee.streampack.core.elements.processing.video.source.ISourceInfoProvider
 import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoSourceInternal
@@ -16,8 +13,9 @@ import java.lang.ref.WeakReference
 
 import io.github.thibaultbee.streampack.core.elements.sources.video.AbstractPreviewableSource
 
-class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput, IVideoSourceInternal {
+class CustomStreamPackSourceInternal : AbstractPreviewableSource(), IVideoSourceInternal {
     internal var hkSurfaceView: MyRtmpSurfaceView? = null
+    internal var pixelTransformSurface: PixelTransformSurface? = null
     override val infoProviderFlow: StateFlow<ISourceInfoProvider> = MutableStateFlow(object : ISourceInfoProvider {
         override fun getSurfaceSize(targetResolution: android.util.Size): android.util.Size = targetResolution
         override val rotationDegrees: Int = 0
@@ -30,11 +28,24 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
     private var rtmpStreamSession: StreamSession? = null
 
     override suspend fun startStream() {
-        rtmpStreamSession?.stream?.onSurfaceChanged(outputSurface)
+//        GlobalScope.launch {
+//            try {
+//                rtmpStreamSession?.connect(StreamSession.Method.PLAYBACK)
+//            } catch (e: Exception) {
+//                android.util.Log.e("CustomStreamPackSource", "RTMP playback exception: ${e.message}", e)
+//            }
+//        }
+
         _isStreamingFlow.value = true
     }
 
     override suspend fun stopStream() {
+        rtmpStreamSession?.let { session ->
+            GlobalScope.launch {
+                session.close()
+            }
+        }
+        rtmpStreamSession = null
         _isStreamingFlow.value = false
     }
 
@@ -43,16 +54,7 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
     }
 
     override fun release() {
-        rtmpStreamSession?.let { session ->
-            GlobalScope.launch {
-                session.close()
-            }
-        }
-        rtmpStreamSession = null
     }
-
-    // MediaOutput interface requirement
-    override var dataSource: WeakReference<MediaOutputDataSource>? = null
 
     // AbstractPreviewableSource required members (stubbed for RTMP source)
     override val timestampOffsetInNs: Long
@@ -63,14 +65,15 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
         get() = _isPreviewingFlow
 
     private var outputSurface: android.view.Surface? = null
+
     override suspend fun getOutput(): android.view.Surface? {
         return outputSurface
     }
 
     override suspend fun setOutput(surface: android.view.Surface) {
         outputSurface = surface
-//        hkSurfaceView?.pixelTransform?.surface = surface
-//        hkSurfaceView?.setSurface(surface)
+        hkSurfaceView?.setSurface(surface)
+        pixelTransformSurface?.setSurface(outputSurface)
     }
 
     override suspend fun hasPreview(): Boolean {
@@ -102,11 +105,6 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
         return targetSize
     }
 
-    // MediaOutput: called by RTMP pipeline
-    override fun append(buffer: MediaBuffer) {
-        android.util.Log.v("CustomStreamPackSource", "append: Buffer info: buffer=${buffer}")
-    }
-
     // AbstractPreviewableSource: implement preview reset logic
     override suspend fun resetPreviewImpl() {
         // No-op for RTMP source, unless preview surface needs to be reset
@@ -119,31 +117,31 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), MediaOutput,
     class Factory(private val hkSurfaceView: MyRtmpSurfaceView? = null) : IVideoSourceInternal.Factory {
         override suspend fun create(context: Context): IVideoSourceInternal {
 
-            val customSource = CustomStreamPackSourceInternal()
-
+            StreamSession.Builder.registerFactory(com.haishinkit.rtmp.RtmpStreamSessionFactory)
             val rtmpUrl = "rtmp://localhost:1935/publish/live" // TODO: Replace with your RTMP URL or pass as parameter
             val uri = android.net.Uri.parse(rtmpUrl)
-            StreamSession.Builder.registerFactory(com.haishinkit.rtmp.RtmpStreamSessionFactory)
             val session = StreamSession.Builder(context, uri).build()
+
+            val pixelTransformSurface = PixelTransformSurface(context)
+
+            // I think this one is important
+//            pixelTransformSurface.dataSource = WeakReference(session.stream)
+
+             hkSurfaceView?.dataSource = WeakReference(session.stream)
+
+            val customSource = CustomStreamPackSourceInternal()
             customSource.rtmpStreamSession = session
+            customSource.pixelTransformSurface = pixelTransformSurface
             customSource.hkSurfaceView = hkSurfaceView
-
-            // TODO What does this do?
-            customSource.dataSource = WeakReference(session.stream)
-
-
-//            hkSurfaceView?.dataSource = WeakReference(session.stream)
 
             GlobalScope.launch {
                 try {
-                    val result = session.connect(StreamSession.Method.PLAYBACK)
-                    if (result == null || result.isFailure) {
-                        android.util.Log.e("CustomStreamPackSource", "RTMP playback failed: ${result?.exceptionOrNull()?.message}")
-                    }
+                    session.connect(StreamSession.Method.PLAYBACK)
                 } catch (e: Exception) {
                     android.util.Log.e("CustomStreamPackSource", "RTMP playback exception: ${e.message}", e)
                 }
             }
+
 
             return customSource
         }
