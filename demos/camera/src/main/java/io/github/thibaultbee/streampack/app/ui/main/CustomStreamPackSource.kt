@@ -121,7 +121,9 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), IVideoSource
     }
 
     override fun <T> getPreviewSize(targetSize: android.util.Size, targetClass: Class<T>): android.util.Size {
-        return targetSize
+        val swappedSize = android.util.Size(targetSize.height, targetSize.width)
+        android.util.Log.d("CustomStreamPackSource", "Requested preview size: $targetSize, swapped: $swappedSize for $targetClass")
+        return swappedSize
     }
 
     override suspend fun resetPreviewImpl() {
