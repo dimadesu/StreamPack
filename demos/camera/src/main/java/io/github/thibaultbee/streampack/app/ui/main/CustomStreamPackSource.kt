@@ -24,7 +24,8 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), IVideoSource
     })
     private val _isStreamingFlow = MutableStateFlow(false)
     override val isStreamingFlow: StateFlow<Boolean> get() = _isStreamingFlow
-    private var exoPlayer: ExoPlayer? = null
+    private var exoPlayer: ExoPlayer? = null // For output
+    private var previewPlayer: ExoPlayer? = null // For preview
 
     override suspend fun startStream() {
         withContext(Dispatchers.Main) {
@@ -35,6 +36,9 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), IVideoSource
     }
 
     override suspend fun stopStream() {
+        withContext(Dispatchers.Main) {
+            exoPlayer?.playWhenReady = false
+        }
         _isStreamingFlow.value = false
     }
 
@@ -45,10 +49,14 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), IVideoSource
         if (Looper.myLooper() == Looper.getMainLooper()) {
             exoPlayer?.release()
             exoPlayer = null
+            previewPlayer?.release()
+            previewPlayer = null
         } else {
             Handler(Looper.getMainLooper()).post {
                 exoPlayer?.release()
                 exoPlayer = null
+                previewPlayer?.release()
+                previewPlayer = null
             }
         }
     }
@@ -62,6 +70,7 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), IVideoSource
         get() = _isPreviewingFlow
 
     private var outputSurface: android.view.Surface? = null
+    private var previewSurface: android.view.Surface? = null
 
     override suspend fun getOutput(): android.view.Surface? {
         return outputSurface
@@ -69,28 +78,45 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), IVideoSource
 
     override suspend fun setOutput(surface: android.view.Surface) {
         outputSurface = surface
-
         withContext(Dispatchers.Main) {
             exoPlayer?.setVideoSurface(surface)
         }
     }
 
     override suspend fun hasPreview(): Boolean {
-        return false
+        return previewSurface != null
     }
 
     override suspend fun setPreview(surface: android.view.Surface) {
+        previewSurface = surface
+        withContext(Dispatchers.Main) {
+            previewPlayer?.setVideoSurface(surface)
+        }
     }
 
     override suspend fun startPreview() {
-        _isPreviewingFlow.value = false
+        previewSurface?.let { surface ->
+            withContext(Dispatchers.Main) {
+                previewPlayer?.setVideoSurface(surface)
+                previewPlayer?.prepare()
+                previewPlayer?.playWhenReady = true
+            }
+            _isPreviewingFlow.value = true
+        } ?: run {
+            _isPreviewingFlow.value = false
+        }
     }
 
     override suspend fun startPreview(previewSurface: android.view.Surface) {
-        _isPreviewingFlow.value = false
+        setPreview(previewSurface)
+        startPreview()
     }
 
     override suspend fun stopPreview() {
+        withContext(Dispatchers.Main) {
+            previewPlayer?.playWhenReady = false
+            previewPlayer?.setVideoSurface(null)
+        }
         _isPreviewingFlow.value = false
     }
 
@@ -107,20 +133,31 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), IVideoSource
     class Factory() : IVideoSourceInternal.Factory {
         override suspend fun create(context: Context): IVideoSourceInternal {
             val customSrc = CustomStreamPackSourceInternal()
+            val rtmpUrl = "rtmp://localhost:1935/publish/live"
+            val mediaItem = MediaItem.fromUri(rtmpUrl)
+            val mediaSource = ProgressiveMediaSource.Factory(
+                try {
+                    androidx.media3.datasource.rtmp.RtmpDataSource.Factory()
+                } catch (e: Exception) {
+                    androidx.media3.datasource.DefaultDataSource.Factory(context)
+                }
+            ).createMediaSource(mediaItem)
+            val mediaSourcePreview = ProgressiveMediaSource.Factory(
+                try {
+                    androidx.media3.datasource.rtmp.RtmpDataSource.Factory()
+                } catch (e: Exception) {
+                    androidx.media3.datasource.DefaultDataSource.Factory(context)
+                }
+            ).createMediaSource(mediaItem)
+
             val exoPlayer = ExoPlayer.Builder(context).build()
+            val previewPlayer = ExoPlayer.Builder(context).build()
             withContext(Dispatchers.Main) {
-                val rtmpUrl = "rtmp://localhost:1935/publish/live"
-                val mediaItem = MediaItem.fromUri(rtmpUrl)
-                val mediaSource = ProgressiveMediaSource.Factory(
-                    try {
-                        androidx.media3.datasource.rtmp.RtmpDataSource.Factory()
-                    } catch (e: Exception) {
-                        androidx.media3.datasource.DefaultDataSource.Factory(context)
-                    }
-                ).createMediaSource(mediaItem)
                 exoPlayer.setMediaSource(mediaSource)
+                previewPlayer.setMediaSource(mediaSourcePreview)
             }
             customSrc.exoPlayer = exoPlayer
+            customSrc.previewPlayer = previewPlayer
             return customSrc
         }
 
