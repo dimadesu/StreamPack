@@ -98,8 +98,6 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), IVideoSource
         previewSurface?.let { surface ->
             withContext(Dispatchers.Main) {
                 previewPlayer?.setVideoSurface(surface)
-                previewPlayer?.prepare()
-                previewPlayer?.playWhenReady = true
             }
             _isPreviewingFlow.value = true
         } ?: run {
@@ -121,9 +119,13 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), IVideoSource
     }
 
     override fun <T> getPreviewSize(targetSize: android.util.Size, targetClass: Class<T>): android.util.Size {
-        val swappedSize = android.util.Size(targetSize.height, targetSize.width)
-        android.util.Log.d("CustomStreamPackSource", "Requested preview size: $targetSize, swapped: $swappedSize for $targetClass")
-        return swappedSize
+        android.util.Log.d("CustomStreamPackSource", "previewPlayer?.videoFormat ${previewPlayer?.videoFormat}")
+        android.util.Log.d("CustomStreamPackSource", "targetSize $targetSize")
+        val width = previewPlayer?.videoFormat?.width ?: 1920
+        val height = previewPlayer?.videoFormat?.height ?: 1080
+        val previewSize = android.util.Size(width, height)
+        android.util.Log.d("CustomStreamPackSource", "previewSize: $previewSize")
+        return previewSize
     }
 
     override suspend fun resetPreviewImpl() {
@@ -154,9 +156,12 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), IVideoSource
 
             val exoPlayer = ExoPlayer.Builder(context).build()
             val previewPlayer = ExoPlayer.Builder(context).build()
+
             withContext(Dispatchers.Main) {
                 exoPlayer.setMediaSource(mediaSource)
                 previewPlayer.setMediaSource(mediaSourcePreview)
+                previewPlayer.prepare()
+                previewPlayer.playWhenReady = true
             }
             customSrc.exoPlayer = exoPlayer
             customSrc.previewPlayer = previewPlayer
