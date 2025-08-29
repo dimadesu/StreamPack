@@ -4,44 +4,56 @@ import android.Manifest
 import android.content.Context
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.os.Handler
+import android.os.Looper
 import androidx.annotation.RequiresPermission
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import io.github.thibaultbee.streampack.app.ui.main.CircularPcmBuffer
+import io.github.thibaultbee.streampack.app.ui.main.CustomAudioRenderersFactory
 import io.github.thibaultbee.streampack.core.elements.data.RawFrame
 import io.github.thibaultbee.streampack.core.elements.sources.audio.AudioSourceConfig
 import io.github.thibaultbee.streampack.core.elements.sources.audio.IAudioSource
 import io.github.thibaultbee.streampack.core.elements.sources.audio.IAudioSourceInternal
 import io.github.thibaultbee.streampack.core.elements.utils.pool.IReadOnlyRawFrameFactory
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.nio.ByteBuffer
 
-class CustomAudioInput2 : IAudioSourceInternal {
-    private var audioRecordWrapper: AudioRecordWrapper? = null
+class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
+    private var audioRecordWrapper: AudioRecordWrapper2? = null
     private var bufferSize: Int? = null
 
     private val _isStreamingFlow = MutableStateFlow(false)
     override val isStreamingFlow = _isStreamingFlow.asStateFlow()
 
+    private var exoPlayer: ExoPlayer? = null
+
     companion object {
-        private const val TAG = "CustomAudioInput2"
+        private const val TAG = "CustomAudioInput3"
     }
 
     override suspend fun configure(config: AudioSourceConfig) {
-        audioRecordWrapper?.release()
+        val ctx = requireNotNull(context) { "Context must be set before configure" }
+
         bufferSize = AudioRecord.getMinBufferSize(
             config.sampleRate,
             config.channelConfig,
             config.byteFormat
         )
-        val audioRecord = AudioRecord(
-            MediaRecorder.AudioSource.MIC,
-            config.sampleRate,
-            config.channelConfig,
-            config.byteFormat,
-            bufferSize!!
-        )
-        audioRecordWrapper = AudioRecordWrapper(audioRecord)
+        val pcmBuffer = CircularPcmBuffer(bufferSize * 1) // Reduced buffer size to align with minimal buffer strategy
+        val renderersFactory = CustomAudioRenderersFactory(ctx, pcmBuffer)
+        val exoPlayerInstance = ExoPlayer.Builder(ctx, renderersFactory).build()
+        exoPlayer = exoPlayerInstance
+
+
+        android.util.Log.d("CustomAudioSource", "audioBuffer identity (assigned): ${System.identityHashCode(pcmBuffer)}")
+        audioRecordWrapper = AudioRecordWrapper2(ctx, exoPlayerInstance, pcmBuffer)
+        audioRecordWrapper?.config()
     }
 
     override suspend fun startStream() {
@@ -56,7 +68,6 @@ class CustomAudioInput2 : IAudioSourceInternal {
 
     override fun release() {
         audioRecordWrapper?.release()
-        audioRecordWrapper = null
         _isStreamingFlow.tryEmit(false)
     }
 
@@ -87,11 +98,11 @@ class CustomAudioInput2 : IAudioSourceInternal {
 
     class Factory : IAudioSourceInternal.Factory {
         override suspend fun create(context: Context): IAudioSourceInternal {
-            return CustomAudioInput2()
+            return CustomAudioInput3(context)
         }
 
         override fun isSourceEquals(source: IAudioSourceInternal?): Boolean {
-            return source is CustomAudioInput2
+            return source is CustomAudioInput3
         }
     }
 }

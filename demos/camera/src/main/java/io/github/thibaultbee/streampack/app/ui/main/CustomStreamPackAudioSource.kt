@@ -34,15 +34,15 @@ class CustomStreamPackAudioSourceInternal : IAudioSourceInternal {
     private var totalSamplesSent: Long = 0L
         // For hardware timestamp emulation (if available)
         // If you use AudioRecord, you can get hardware timestamp. Here, fallback to monotonic system time
-    fun isReady(): Boolean {
-        val frameSize = 3840 // Match encoder expectation
-        val minBuffer = frameSize * 4 // Require at least 4 frames buffered
-        val available = audioBuffer.available()
-        if (available < minBuffer) {
-            android.util.Log.i("CustomAudioSource", "isReady: waiting for buffer to fill (available=$available, required=$minBuffer)")
-        }
-        return available >= minBuffer
-    }
+//    fun isReady(): Boolean {
+//        val frameSize = 3840 // Match encoder expectation
+//        val minBuffer = frameSize * 4 // Require at least 4 frames buffered
+//        val available = audioBuffer.available()
+//        if (available < minBuffer) {
+//            android.util.Log.i("CustomAudioSource", "isReady: waiting for buffer to fill (available=$available, required=$minBuffer)")
+//        }
+//        return available >= minBuffer
+//    }
 
     override suspend fun startStream() {
         streamStartTimeUs = System.nanoTime() / 1000L
