@@ -9,6 +9,7 @@ import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import io.github.thibaultbee.streampack.app.ui.main.CircularPcmBuffer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.nio.ByteBuffer
 
 class AudioRecordWrapper3(
     private val context: Context,
@@ -42,7 +43,6 @@ class AudioRecordWrapper3(
      * Starts recording audio. Add custom behavior here if needed.
      */
     suspend fun startRecording() {
-
         audioBuffer.clear()
         android.util.Log.i(TAG, "Audio buffer cleared before streaming start.")
         withContext(Dispatchers.Main) {
@@ -63,7 +63,14 @@ class AudioRecordWrapper3(
      * Reads audio data into the provided buffer.
      */
     fun read(buffer: ByteArray, offset: Int, size: Int): Int {
-        return audioRecord.read(buffer, offset, size)
+        // Wrap the provided ByteArray into a ByteBuffer
+        val tempBuffer = ByteBuffer.wrap(buffer, offset, size)
+
+        // Read data from CircularPcmBuffer into the ByteBuffer
+        val bytesRead = audioBuffer.read(tempBuffer)
+
+        // Return the number of bytes read
+        return bytesRead
     }
 
     /**
