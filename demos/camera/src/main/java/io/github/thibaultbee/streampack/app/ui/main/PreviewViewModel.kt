@@ -251,6 +251,24 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             _isTryingConnectionLiveData.postValue(true)
             try {
                 val descriptor = storageRepository.endpointDescriptorFlow.first()
+                // Wait for custom audio source to be ready before starting stream
+                val audioSource = streamer.audioInput?.sourceFlow?.value
+                if (audioSource is io.github.thibaultbee.streampack.app.ui.main.CustomStreamPackAudioSourceInternal) {
+                    Log.i(TAG, "Detected CustomStreamPackAudioSourceInternal in startStream")
+                    val maxWaitMs = 2000
+                    val pollIntervalMs = 50
+                    var waitedMs = 0
+                    while (!audioSource.isReady() && waitedMs < maxWaitMs) {
+                        kotlinx.coroutines.delay(pollIntervalMs.toLong())
+                        waitedMs += pollIntervalMs
+                    }
+                    if (!audioSource.isReady()) {
+                        Log.w(TAG, "Audio buffer not ready after $maxWaitMs ms, starting anyway.")
+                    } else {
+                        Log.i(TAG, "Audio buffer is ready, proceeding to start stream.")
+                    }
+                }
+                Log.i(TAG, "Calling streamer.startStream with descriptor: $descriptor")
                 streamer.startStream(descriptor)
 
                 if (descriptor.type.sinkType == MediaSinkType.SRT) {
@@ -343,7 +361,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             Log.i(TAG, "Switch video source to $nextSource")
             streamer.setVideoSource(nextSource)
 
-            kotlinx.coroutines.delay(5000)
+//            kotlinx.coroutines.delay(5000)
             val nextAudioSource = when (videoSource) {
                 is ICameraSource -> {
                     CustomStreamPackAudioSourceInternal.Factory()

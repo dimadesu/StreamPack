@@ -33,7 +33,11 @@ class CustomStreamPackAudioSourceInternal : IAudioSourceInternal {
     private var audioSampleRate: Int = 44100 // Default, update from config if needed
     private var totalSamplesSent: Long = 0L
         // For hardware timestamp emulation (if available)
-        // If you use AudioRecord, you can get hardware timestamp. Here, fallback to monotonic system time.
+        // If you use AudioRecord, you can get hardware timestamp. Here, fallback to monotonic system time
+    fun isReady(): Boolean {
+        val frameSize = 3840 // Match encoder expectation
+        return audioBuffer.available() >= frameSize
+    }
 
     override suspend fun startStream() {
         streamStartTimeUs = System.nanoTime() / 1000L
@@ -60,8 +64,8 @@ class CustomStreamPackAudioSourceInternal : IAudioSourceInternal {
     override suspend fun configure(config: AudioSourceConfig) {
         audioSampleRate = config.sampleRate
         val ctx = requireNotNull(context) { "Context must be set before configure" }
-        val bufferSize = 3840 // Match encoder expectation
-        val pcmBuffer = CircularPcmBuffer(bufferSize * 8)
+    val bufferSize = 3840 // Match encoder expectation
+    val pcmBuffer = CircularPcmBuffer(bufferSize * 32) // Increased buffer size for more audio buffering
         val renderersFactory = CustomAudioRenderersFactory(ctx, pcmBuffer)
         val rtmpUrl = "rtmp://localhost:1935/publish/live"
         val mediaItem = MediaItem.fromUri(rtmpUrl)
@@ -102,15 +106,17 @@ class CustomStreamPackAudioSourceInternal : IAudioSourceInternal {
             val available = audioBuffer.available()
             val frameCapacity = frame.rawBuffer.remaining()
             android.util.Log.i("CustomAudioSource", "fillAudioFrame: available=$available frameCapacity=$frameCapacity")
-                android.util.Log.d("CustomAudioSource", "audioBuffer identity (read): ${System.identityHashCode(audioBuffer)} available before read: $available")
+            android.util.Log.d("CustomAudioSource", "audioBuffer identity (read): ${System.identityHashCode(audioBuffer)} available before read: $available")
             val maxAligned = (minOf(available, frameCapacity) / bytesPerSample) * bytesPerSample
             if (maxAligned > 0) {
-                val temp = ByteArray(maxAligned)
-                audioBuffer.read(temp, 0, maxAligned)
-                frame.rawBuffer.put(temp)
+                // Prepare ByteBuffer for reading
+                val tempBuffer = frame.rawBuffer.slice()
+                tempBuffer.limit(maxAligned)
+                val bytesRead = audioBuffer.read(tempBuffer)
+                frame.rawBuffer.position(frame.rawBuffer.position() + bytesRead)
                 frame.rawBuffer.flip()
-                android.util.Log.i("CustomAudioSource", "fillAudioFrame: copied $maxAligned bytes (sample-aligned)")
-                    android.util.Log.d("CustomAudioSource", "audioBuffer available after read: ${audioBuffer.available()}")
+                android.util.Log.i("CustomAudioSource", "fillAudioFrame: copied $bytesRead bytes (sample-aligned)")
+                android.util.Log.d("CustomAudioSource", "audioBuffer available after read: ${audioBuffer.available()}")
             } else {
                 if (available > 0 || frameCapacity > 0) {
                     android.util.Log.w("CustomAudioSource", "fillAudioFrame: WARNING - not enough data for a full sample-aligned frame (available=$available, frameCapacity=$frameCapacity, bytesPerSample=$bytesPerSample)")

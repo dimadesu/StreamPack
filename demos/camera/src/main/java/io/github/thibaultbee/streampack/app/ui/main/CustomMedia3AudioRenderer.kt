@@ -42,17 +42,14 @@ class CustomMedia3AudioRenderer(
         lastPresentationTimeUs = bufferPresentationTimeUs
 
         // Intercept decoded audio data
-        val size = buffer.remaining()
-        val temp = ByteArray(size)
-        buffer.get(temp)
-        audioBuffer.write(temp, 0, size)
-        android.util.Log.i("CustomMedia3AudioRenderer", "processOutputBuffer: wrote $size bytes to audioBuffer, timeUs=$bufferPresentationTimeUs")
+        val bytesWritten = audioBuffer.write(buffer)
+        android.util.Log.i("CustomMedia3AudioRenderer", "processOutputBuffer: wrote $bytesWritten bytes to audioBuffer, timeUs=$bufferPresentationTimeUs")
         android.util.Log.d("CustomMedia3AudioRenderer", "audioBuffer identity (write): ${System.identityHashCode(audioBuffer)} available after write: ${audioBuffer.available()}")
-    // NOTE: bufferPresentationTimeUs is NOT used for streaming. Timestamp for encoding/muxing is set in CustomStreamPackAudioSource.getAudioFrame() using sample count and stream start time.
-    android.util.Log.v("CustomMedia3AudioRenderer", "IGNORED: bufferPresentationTimeUs is not used for streaming. Timestamp is set in CustomStreamPackAudioSource.")
+        // NOTE: bufferPresentationTimeUs is NOT used for streaming. Timestamp for encoding/muxing is set in CustomStreamPackAudioSource.getAudioFrame() using sample count and stream start time.
+        android.util.Log.v("CustomMedia3AudioRenderer", "IGNORED: bufferPresentationTimeUs is not used for streaming. Timestamp is set in CustomStreamPackAudioSource.")
 
-    // Release buffer without rendering to audio device to prevent MediaCodec error -38
-    codecAdapter?.releaseOutputBuffer(bufferIndex, false)
+        // Release buffer without rendering to audio device to prevent MediaCodec error -38
+        codecAdapter?.releaseOutputBuffer(bufferIndex, false)
         return true
     }
 }
