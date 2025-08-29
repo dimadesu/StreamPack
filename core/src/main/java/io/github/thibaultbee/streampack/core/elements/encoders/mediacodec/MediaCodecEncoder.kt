@@ -434,6 +434,8 @@ internal constructor(
                             input.listener.onFrameRequested(buffer)
                         } catch (t: Throwable) {
                             Logger.e(tag, "Failed to get input buffer: $t")
+                            Logger.e(tag, "MediaCodec state: $state")
+                            Logger.e(tag, "Thread: ${Thread.currentThread().name}")
                             mediaCodec.queueInputBuffer(
                                 index, 0, 0, 0, 0
                             )
@@ -464,13 +466,48 @@ internal constructor(
         private fun queueInputFrame(
             index: Int, frame: RawFrame
         ) {
-            mediaCodec.queueInputBuffer(
-                index,
-                frame.rawBuffer.position(),
-                frame.rawBuffer.limit(),
-                frame.timestampInUs /* in us */,
-                0
-            )
+            try {
+                // Validate MediaCodec state
+                if (!state.isRunning) {
+                    Logger.w(tag, "Cannot queue input frame: Encoder is not running. State: $state")
+                    return
+                }
+
+                // Validate buffer index
+                if (index < 0) {
+                    Logger.e(tag, "Invalid buffer index: $index")
+                    return
+                }
+
+                // Validate frame size
+                if (!frame.rawBuffer.hasRemaining()) {
+                    Logger.w(tag, "Skipping frame with size 0")
+                    return
+                }
+
+                // Validate frame parameters
+                val size = min(frame.rawBuffer.remaining(), mediaCodec.getInputBuffer(index)?.remaining() ?: 0)
+                if (size <= 0) {
+                    Logger.e(tag, "Invalid frame size after validation: $size")
+                    return
+                }
+
+                // Queue the input buffer
+                mediaCodec.queueInputBuffer(
+                    index,
+                    frame.rawBuffer.position(),
+                    size,
+                    frame.timestampInUs,
+                    0
+                )
+            } catch (e: IllegalArgumentException) {
+                Logger.e(tag, "Failed to queue input buffer: ${e.message}")
+                Logger.e(tag, "Buffer index: $index, Frame size: ${frame.rawBuffer.remaining()}, Timestamp: ${frame.timestampInUs}")
+                throw e
+            } catch (e: Throwable) {
+                Logger.e(tag, "Unexpected error while queuing input buffer: ${e.message}", e)
+                throw e
+            }
         }
     }
 
