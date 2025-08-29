@@ -1,31 +1,19 @@
 package io.github.thibaultbee.streampack.app.sources.audio
 
-import android.Manifest
 import android.content.Context
 import android.media.AudioRecord
-import android.media.MediaRecorder
-import android.os.Handler
-import android.os.Looper
-import androidx.annotation.RequiresPermission
-import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import io.github.thibaultbee.streampack.app.ui.main.CircularPcmBuffer
 import io.github.thibaultbee.streampack.app.ui.main.CustomAudioRenderersFactory
 import io.github.thibaultbee.streampack.core.elements.data.RawFrame
 import io.github.thibaultbee.streampack.core.elements.sources.audio.AudioSourceConfig
-import io.github.thibaultbee.streampack.core.elements.sources.audio.IAudioSource
 import io.github.thibaultbee.streampack.core.elements.sources.audio.IAudioSourceInternal
 import io.github.thibaultbee.streampack.core.elements.utils.pool.IReadOnlyRawFrameFactory
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.nio.ByteBuffer
 
 class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
-    private var audioRecordWrapper: AudioRecordWrapper2? = null
+    private var audioRecordWrapper: AudioRecordWrapper3? = null
     private var bufferSize: Int? = null
 
     private val _isStreamingFlow = MutableStateFlow(false)
@@ -55,7 +43,7 @@ class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
 
 
         android.util.Log.d("CustomAudioSource", "audioBuffer identity (assigned): ${System.identityHashCode(pcmBuffer)}")
-        audioRecordWrapper = AudioRecordWrapper2(ctx, exoPlayerInstance, pcmBuffer)
+        audioRecordWrapper = AudioRecordWrapper3(ctx, exoPlayerInstance, pcmBuffer)
         audioRecordWrapper?.config()
 
     }

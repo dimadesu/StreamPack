@@ -1,19 +1,16 @@
 package io.github.thibaultbee.streampack.app.sources.audio
 
 import android.content.Context
-import android.media.AudioRecord
 import android.os.Handler
 import android.os.Looper
 import androidx.media3.common.MediaItem
-import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import io.github.thibaultbee.streampack.app.ui.main.CircularPcmBuffer
-import io.github.thibaultbee.streampack.app.ui.main.CustomAudioRenderersFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class AudioRecordWrapper2(
+class AudioRecordWrapper3(
     private val context: Context,
     private var exoPlayer: ExoPlayer? = null,
     private val audioBuffer: CircularPcmBuffer
