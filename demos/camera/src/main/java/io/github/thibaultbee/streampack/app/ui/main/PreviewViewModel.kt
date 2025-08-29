@@ -342,6 +342,23 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             }
             Log.i(TAG, "Switch video source to $nextSource")
             streamer.setVideoSource(nextSource)
+
+            kotlinx.coroutines.delay(5000)
+            val nextAudioSource = when (videoSource) {
+                is ICameraSource -> {
+                    CustomStreamPackAudioSourceInternal.Factory()
+                }
+                is CustomStreamPackSourceInternal -> {
+                    MicrophoneSourceFactory()
+                }
+                else -> {
+                    Log.i(TAG, "Unknown video source. Fallback to microphone source")
+                    MicrophoneSourceFactory()
+                }
+            }
+            Log.i(TAG, "Switch audio source to $nextAudioSource (after 3s delay)")
+            streamer.setAudioSource(nextAudioSource)
+
         }
     }
 
