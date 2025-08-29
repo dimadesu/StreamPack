@@ -62,7 +62,7 @@ class CustomAudioInput2 : IAudioSourceInternal {
 
     override fun getAudioFrame(frameFactory: IReadOnlyRawFrameFactory): RawFrame {
         val buffer = frameFactory.create(bufferSize!!, 0)
-        val length = audioRecordWrapper?.read(buffer.rawBuffer.array(), 0, buffer.rawBuffer.remaining()) ?: 0
+        val length = audioRecordWrapper?.read(buffer.rawBuffer, buffer.rawBuffer.remaining()) ?: 0
         if (length > 0) {
             buffer.timestampInUs = System.nanoTime() / 1000
             return buffer
@@ -75,7 +75,7 @@ class CustomAudioInput2 : IAudioSourceInternal {
     override fun fillAudioFrame(frame: RawFrame): RawFrame {
         val audioRecordWrapper = requireNotNull(audioRecordWrapper) { "Audio source is not initialized" }
         val buffer = frame.rawBuffer
-        val length = audioRecordWrapper.read(buffer.array(), 0, buffer.remaining())
+        val length = audioRecordWrapper.read(buffer, buffer.remaining())
         if (length > 0) {
             frame.timestampInUs = System.nanoTime() / 1000
             return frame

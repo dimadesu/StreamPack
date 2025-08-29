@@ -1,6 +1,7 @@
 package io.github.thibaultbee.streampack.app.sources.audio
 
 import android.media.AudioRecord
+import java.nio.ByteBuffer
 
 /**
  * A wrapper around [AudioRecord] to allow overriding methods like [startRecording].
@@ -29,8 +30,8 @@ class AudioRecordWrapper(
     /**
      * Reads audio data into the provided buffer.
      */
-    fun read(buffer: ByteArray, offset: Int, size: Int): Int {
-        return audioRecord.read(buffer, offset, size)
+    fun read(buffer: ByteBuffer, size: Int): Int {
+        return audioRecord.read(buffer, size)
     }
 
     /**

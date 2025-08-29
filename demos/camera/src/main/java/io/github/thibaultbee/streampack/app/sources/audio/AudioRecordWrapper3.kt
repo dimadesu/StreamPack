@@ -62,12 +62,9 @@ class AudioRecordWrapper3(
     /**
      * Reads audio data into the provided buffer.
      */
-    fun read(buffer: ByteArray, offset: Int, size: Int): Int {
-        // Wrap the provided ByteArray into a ByteBuffer
-        val tempBuffer = ByteBuffer.wrap(buffer, offset, size)
-
+    fun read(buffer: ByteBuffer, size: Int): Int {
         // Read data from CircularPcmBuffer into the ByteBuffer
-        val bytesRead = audioBuffer.read(tempBuffer)
+        val bytesRead = audioBuffer.read(buffer)
 
         // Return the number of bytes read
         return bytesRead
