@@ -5,25 +5,30 @@ import android.content.Context
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import androidx.annotation.RequiresPermission
+import io.github.thibaultbee.streampack.app.ui.main.CircularPcmBuffer
 import io.github.thibaultbee.streampack.core.elements.data.RawFrame
 import io.github.thibaultbee.streampack.core.elements.sources.audio.AudioSourceConfig
+import io.github.thibaultbee.streampack.core.elements.sources.audio.IAudioSource
 import io.github.thibaultbee.streampack.core.elements.sources.audio.IAudioSourceInternal
 import io.github.thibaultbee.streampack.core.elements.utils.pool.IReadOnlyRawFrameFactory
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import java.nio.ByteBuffer
 
-class CustomAudioInput2 : IAudioSourceInternal {
+class CustomAudioInput2(private val audioSource: Int) : IAudioSourceInternal {
     private var audioRecord: AudioRecord? = null
     private var bufferSize: Int? = null
 
     private val _isStreamingFlow = MutableStateFlow(false)
     override val isStreamingFlow = _isStreamingFlow.asStateFlow()
 
+    private lateinit var circularBuffer: CircularPcmBuffer
+
     companion object {
         private const val TAG = "CustomAudioInput2"
     }
 
-    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     override suspend fun configure(config: AudioSourceConfig) {
         audioRecord?.release()
         bufferSize = AudioRecord.getMinBufferSize(
@@ -32,17 +37,31 @@ class CustomAudioInput2 : IAudioSourceInternal {
             config.byteFormat
         )
         audioRecord = AudioRecord(
-            MediaRecorder.AudioSource.MIC,
+            audioSource, // Use the provided audio source from the constructor
             config.sampleRate,
             config.channelConfig,
             config.byteFormat,
             bufferSize!!
         )
+        circularBuffer = CircularPcmBuffer(bufferSize!! * 2) // Double the buffer size for safety
     }
 
     override suspend fun startStream() {
         audioRecord?.startRecording()
         _isStreamingFlow.tryEmit(true)
+
+        // Start a coroutine to continuously read from AudioRecord and write to the buffer
+        // kotlinx.coroutines.GlobalScope.launch {
+        //     val tempBuffer = ByteBuffer.allocateDirect(bufferSize!!)
+        //     while (_isStreamingFlow.value) {
+        //         tempBuffer.clear()
+        //         val bytesRead = audioRecord?.read(tempBuffer, tempBuffer.remaining()) ?: 0
+        //         if (bytesRead > 0) {
+        //             tempBuffer.flip()
+        //             circularBuffer.write(tempBuffer)
+        //         }
+        //     }
+        // }
     }
 
     override suspend fun stopStream() {
@@ -87,7 +106,8 @@ class CustomAudioInput2 : IAudioSourceInternal {
 
     class Factory : IAudioSourceInternal.Factory {
         override suspend fun create(context: Context): IAudioSourceInternal {
-            return CustomAudioInput2()
+            val audioSource = MediaRecorder.AudioSource.MIC // Example: Create audioSource here
+            return CustomAudioInput2(audioSource)
         }
 
         override fun isSourceEquals(source: IAudioSourceInternal?): Boolean {
