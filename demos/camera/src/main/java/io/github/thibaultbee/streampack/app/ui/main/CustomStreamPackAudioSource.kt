@@ -118,7 +118,7 @@ class CustomStreamPackAudioSourceInternal : IAudioSourceInternal {
                 // Prepare ByteBuffer for reading
                 val tempBuffer = frame.rawBuffer.slice()
                 tempBuffer.limit(maxAligned)
-                val bytesRead = audioBuffer.read(tempBuffer)
+                val bytesRead = audioBuffer.read(tempBuffer, tempBuffer.remaining())
                 frame.rawBuffer.position(frame.rawBuffer.position() + bytesRead)
                 frame.rawBuffer.flip()
                 android.util.Log.i("CustomAudioSource", "fillAudioFrame: copied $bytesRead bytes (sample-aligned)")

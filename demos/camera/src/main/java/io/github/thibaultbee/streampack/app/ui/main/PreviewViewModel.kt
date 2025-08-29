@@ -37,6 +37,7 @@ import io.github.thibaultbee.streampack.app.data.rotation.RotationRepository
 import io.github.thibaultbee.streampack.app.data.storage.DataStoreRepository
 import io.github.thibaultbee.streampack.app.sources.audio.CustomAudioInput
 import io.github.thibaultbee.streampack.app.sources.audio.CustomAudioInput2
+import io.github.thibaultbee.streampack.app.sources.audio.CustomAudioInput3
 import io.github.thibaultbee.streampack.app.ui.main.usecases.BuildStreamerUseCase
 import io.github.thibaultbee.streampack.app.utils.ObservableViewModel
 import io.github.thibaultbee.streampack.app.utils.dataStore
@@ -366,7 +367,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 //            kotlinx.coroutines.delay(5000)
             val nextAudioSource = when (videoSource) {
                 is ICameraSource -> {
-                    CustomAudioInput2.Factory()
+                    CustomAudioInput3.Factory()
                 }
                 is CustomStreamPackSourceInternal -> {
                     MicrophoneSourceFactory()

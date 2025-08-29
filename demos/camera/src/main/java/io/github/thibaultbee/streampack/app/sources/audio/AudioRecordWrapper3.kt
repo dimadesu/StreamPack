@@ -32,8 +32,8 @@ class AudioRecordWrapper3(
                 }
             ).createMediaSource(mediaItem)
             exoPlayer?.setMediaSource(mediaSource)
-            exoPlayer?.prepare()
-            exoPlayer?.playWhenReady = true
+//            exoPlayer?.prepare()
+//            exoPlayer?.playWhenReady = true
         }
     }
 
@@ -46,6 +46,7 @@ class AudioRecordWrapper3(
         audioBuffer.clear()
         android.util.Log.i(TAG, "Audio buffer cleared before streaming start.")
         withContext(Dispatchers.Main) {
+            exoPlayer?.prepare()
             exoPlayer?.playWhenReady = true
         }
     }
@@ -64,7 +65,7 @@ class AudioRecordWrapper3(
      */
     fun read(buffer: ByteBuffer, size: Int): Int {
         // Read data from CircularPcmBuffer into the ByteBuffer
-        val bytesRead = audioBuffer.read(buffer)
+        val bytesRead = audioBuffer.read(buffer, size)
 
         // Return the number of bytes read
         return bytesRead
@@ -83,5 +84,6 @@ class AudioRecordWrapper3(
                 exoPlayer = null
             }
         }
+        audioBuffer.clear()
     }
 }

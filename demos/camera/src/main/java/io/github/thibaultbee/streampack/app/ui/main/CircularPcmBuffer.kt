@@ -33,11 +33,10 @@ class CircularPcmBuffer(private val bufferSize: Int) {
      * Reads up to [dest.remaining()] bytes into [dest] ByteBuffer.
      * Returns the number of bytes actually read.
      */
-    fun read(dest: ByteBuffer): Int {
-        val length = dest.remaining()
-        val bytesToRead = minOf(length, availableBytes)
+    fun read(dest: ByteBuffer, size: Int): Int {
+        val bytesToRead = minOf(size, availableBytes)
         var bytesRead = 0
-        android.util.Log.d(TAG, "read(ByteBuffer): requested=$length availableBefore=$availableBytes readPos=$readPos writePos=$writePos")
+        android.util.Log.d(TAG, "read(ByteBuffer): requested=$size availableBefore=$availableBytes readPos=$readPos writePos=$writePos")
         while (bytesRead < bytesToRead) {
             dest.put(buffer[readPos])
             readPos = (readPos + 1) % bufferSize

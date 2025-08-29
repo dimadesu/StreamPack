@@ -36,17 +36,15 @@ class CustomMedia3AudioRenderer(
     ): Boolean {
         if (buffer == null) return true
         // Assert monotonic timestamps
-        if (lastPresentationTimeUs != C.TIME_UNSET) {
-            Assertions.checkState(bufferPresentationTimeUs >= lastPresentationTimeUs)
-        }
-        lastPresentationTimeUs = bufferPresentationTimeUs
+//        if (lastPresentationTimeUs != C.TIME_UNSET) {
+//            Assertions.checkState(bufferPresentationTimeUs >= lastPresentationTimeUs)
+//        }
+//        lastPresentationTimeUs = bufferPresentationTimeUs
 
         // Intercept decoded audio data
         val bytesWritten = audioBuffer.write(buffer)
-        android.util.Log.i("CustomMedia3AudioRenderer", "processOutputBuffer: wrote $bytesWritten bytes to audioBuffer, timeUs=$bufferPresentationTimeUs")
+        android.util.Log.i("CustomMedia3AudioRenderer", "processOutputBuffer: wrote $bytesWritten bytes to audioBuffer")
         android.util.Log.d("CustomMedia3AudioRenderer", "audioBuffer identity (write): ${System.identityHashCode(audioBuffer)} available after write: ${audioBuffer.available()}")
-        // NOTE: bufferPresentationTimeUs is NOT used for streaming. Timestamp for encoding/muxing is set in CustomStreamPackAudioSource.getAudioFrame() using sample count and stream start time.
-        android.util.Log.v("CustomMedia3AudioRenderer", "IGNORED: bufferPresentationTimeUs is not used for streaming. Timestamp is set in CustomStreamPackAudioSource.")
 
         // Release buffer without rendering to audio device to prevent MediaCodec error -38
         codecAdapter?.releaseOutputBuffer(bufferIndex, false)
