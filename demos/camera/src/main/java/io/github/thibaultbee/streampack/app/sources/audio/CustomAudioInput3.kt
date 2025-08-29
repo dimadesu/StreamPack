@@ -19,8 +19,6 @@ class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
     private val _isStreamingFlow = MutableStateFlow(false)
     override val isStreamingFlow = _isStreamingFlow.asStateFlow()
 
-    private var exoPlayer: ExoPlayer? = null
-
     companion object {
         private const val TAG = "CustomAudioInput3"
     }
@@ -39,8 +37,6 @@ class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
         val pcmBuffer = CircularPcmBuffer(safeBufferSize * 1)
         val renderersFactory = CustomAudioRenderersFactory(ctx, pcmBuffer)
         val exoPlayerInstance = ExoPlayer.Builder(ctx, renderersFactory).build()
-        exoPlayer = exoPlayerInstance
-
 
         android.util.Log.d("CustomAudioSource", "audioBuffer identity (assigned): ${System.identityHashCode(pcmBuffer)}")
         audioRecordWrapper = AudioRecordWrapper3(ctx, exoPlayerInstance, pcmBuffer)
