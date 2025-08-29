@@ -45,7 +45,10 @@ class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
             config.channelConfig,
             config.byteFormat
         )
-        val pcmBuffer = CircularPcmBuffer(bufferSize * 1) // Reduced buffer size to align with minimal buffer strategy
+
+        val safeBufferSize = bufferSize ?: return
+
+        val pcmBuffer = CircularPcmBuffer(safeBufferSize * 1)
         val renderersFactory = CustomAudioRenderersFactory(ctx, pcmBuffer)
         val exoPlayerInstance = ExoPlayer.Builder(ctx, renderersFactory).build()
         exoPlayer = exoPlayerInstance
@@ -54,6 +57,7 @@ class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
         android.util.Log.d("CustomAudioSource", "audioBuffer identity (assigned): ${System.identityHashCode(pcmBuffer)}")
         audioRecordWrapper = AudioRecordWrapper2(ctx, exoPlayerInstance, pcmBuffer)
         audioRecordWrapper?.config()
+
     }
 
     override suspend fun startStream() {
