@@ -16,6 +16,8 @@ class CustomMedia3AudioRenderer(
 ) : MediaCodecAudioRenderer(context, mediaCodecSelector) {
     private var lastPresentationTimeUs: Long = C.TIME_UNSET
 
+    private val _isDecodeOnlyBuffer = true
+
     override fun onPositionReset(positionUs: Long, joining: Boolean) {
         super.onPositionReset(positionUs, joining)
         lastPresentationTimeUs = C.TIME_UNSET
@@ -34,7 +36,6 @@ class CustomMedia3AudioRenderer(
         isLastBuffer: Boolean,
         format: Format
     ): Boolean {
-        if (buffer == null) return true
         // Assert monotonic timestamps
 //        if (lastPresentationTimeUs != C.TIME_UNSET) {
 //            Assertions.checkState(bufferPresentationTimeUs >= lastPresentationTimeUs)
@@ -42,12 +43,14 @@ class CustomMedia3AudioRenderer(
 //        lastPresentationTimeUs = bufferPresentationTimeUs
 
         // Intercept decoded audio data
-        val bytesWritten = audioBuffer.write(buffer)
-        android.util.Log.i("CustomMedia3AudioRenderer", "processOutputBuffer: wrote $bytesWritten bytes to audioBuffer")
-        android.util.Log.d("CustomMedia3AudioRenderer", "audioBuffer identity (write): ${System.identityHashCode(audioBuffer)} available after write: ${audioBuffer.available()}")
+        if (buffer != null) {
+            val bytesWritten = audioBuffer.write(buffer)
+            android.util.Log.i("CustomMedia3AudioRenderer", "processOutputBuffer: wrote $bytesWritten bytes to audioBuffer")
+            android.util.Log.d("CustomMedia3AudioRenderer", "audioBuffer identity (write): ${System.identityHashCode(audioBuffer)} available after write: ${audioBuffer.available()}")
+        }
 
-        // Release buffer without rendering to audio device to prevent MediaCodec error -38
-        codecAdapter?.releaseOutputBuffer(bufferIndex, false)
-        return true
+
+        return super.processOutputBuffer(positionUs, elapsedRealtimeUs, codecAdapter, buffer, bufferIndex, bufferFlags, sampleCount, bufferPresentationTimeUs, _isDecodeOnlyBuffer, isLastBuffer, format)
+
     }
 }
