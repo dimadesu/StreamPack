@@ -40,7 +40,7 @@ import java.util.UUID
  * The [AudioRecordSource] class is an implementation of [IAudioSourceInternal] that captures audio
  * from [AudioRecord].
  */
-internal sealed class AudioRecordSource : IAudioSourceInternal, IAudioRecordSource {
+public sealed class AudioRecordSource : IAudioSourceInternal, IAudioRecordSource {
     private var audioRecord: AudioRecord? = null
     private var bufferSize: Int? = null
 

@@ -28,7 +28,7 @@ import java.util.UUID
  * The [MicrophoneSource] class is an implementation of [AudioRecordSource] that captures audio
  * from the microphone.
  */
-internal class MicrophoneSource : AudioRecordSource() {
+public open class MicrophoneSource : AudioRecordSource() {
     override fun buildAudioRecord(config: AudioSourceConfig, bufferSize: Int): AudioRecord {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val audioFormat = AudioFormat.Builder()
@@ -59,11 +59,13 @@ internal class MicrophoneSource : AudioRecordSource() {
  *
  * @param effects a set of audio effects to apply to the audio source
  */
-class MicrophoneSourceFactory(
+open class MicrophoneSourceFactory(
     effects: Set<UUID> = defaultAudioEffects
 ) :
     AudioRecordSourceFactory(effects) {
-    override suspend fun createImpl(context: Context) = MicrophoneSource()
+    public override suspend fun createImpl(context: Context): MicrophoneSource {
+        return MicrophoneSource()
+    }
 
     override fun isSourceEquals(source: IAudioSourceInternal?): Boolean {
         return source is MicrophoneSource
