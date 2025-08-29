@@ -36,7 +36,12 @@ class CustomStreamPackAudioSourceInternal : IAudioSourceInternal {
         // If you use AudioRecord, you can get hardware timestamp. Here, fallback to monotonic system time
     fun isReady(): Boolean {
         val frameSize = 3840 // Match encoder expectation
-        return audioBuffer.available() >= frameSize
+        val minBuffer = frameSize * 4 // Require at least 4 frames buffered
+        val available = audioBuffer.available()
+        if (available < minBuffer) {
+            android.util.Log.i("CustomAudioSource", "isReady: waiting for buffer to fill (available=$available, required=$minBuffer)")
+        }
+        return available >= minBuffer
     }
 
     override suspend fun startStream() {
@@ -50,7 +55,8 @@ class CustomStreamPackAudioSourceInternal : IAudioSourceInternal {
             exoPlayer?.playWhenReady = true
         }
         // Delay to allow ExoPlayer to start and buffer to fill
-        kotlinx.coroutines.delay(200)
+        kotlinx.coroutines.delay(1000)
+        android.util.Log.d("CustomAudioSource", "Buffer state after startup delay: available=${audioBuffer.available()}")
         _isStreamingFlow.value = true
     }
 
@@ -65,7 +71,7 @@ class CustomStreamPackAudioSourceInternal : IAudioSourceInternal {
         audioSampleRate = config.sampleRate
         val ctx = requireNotNull(context) { "Context must be set before configure" }
     val bufferSize = 3840 // Match encoder expectation
-    val pcmBuffer = CircularPcmBuffer(bufferSize * 32) // Increased buffer size for more audio buffering
+    val pcmBuffer = CircularPcmBuffer(bufferSize * 1) // Reduced buffer size to align with minimal buffer strategy
         val renderersFactory = CustomAudioRenderersFactory(ctx, pcmBuffer)
         val rtmpUrl = "rtmp://localhost:1935/publish/live"
         val mediaItem = MediaItem.fromUri(rtmpUrl)
@@ -149,18 +155,25 @@ class CustomStreamPackAudioSourceInternal : IAudioSourceInternal {
             // Optionally, drop or pad the frame here
         }
         val samplesInFrame = audioDataSize / bytesPerSample
-        // Moblin-style timestamp normalization: store first buffer timestamp and use zero-based timeline
-        val currentBufferTimestampUs = System.nanoTime() / 1000L
-        if (firstAudioBufferTimestampUs == null) {
-            firstAudioBufferTimestampUs = currentBufferTimestampUs
-        }
-        val normalizedTimestampUs = currentBufferTimestampUs - (firstAudioBufferTimestampUs ?: 0L)
-        val timestampInUs = streamStartTimeUs + normalizedTimestampUs
-        android.util.Log.i("CustomAudioSource", "AUDIO TIMESTAMP (Moblin-style): streamStartTimeUs=$streamStartTimeUs, firstAudioBufferTimestampUs=$firstAudioBufferTimestampUs, currentBufferTimestampUs=$currentBufferTimestampUs, normalizedTimestampUs=$normalizedTimestampUs, timestampInUs=$timestampInUs, samplesInFrame=$samplesInFrame")
+        // Calculate timestamp based on total samples sent and sample rate (relative, starting at zero)
+        val timestampInUs = (totalSamplesSent * 1_000_000L) / audioSampleRate
+        android.util.Log.i(
+            "CustomAudioSource",
+            "AUDIO TIMESTAMP (Sample-based): timestampInUs=$timestampInUs, " +
+            "samplesInFrame=$samplesInFrame, totalSamplesSent=$totalSamplesSent, " +
+            "audioSampleRate=$audioSampleRate"
+        )
+        // Extra detailed log for debugging
+        android.util.Log.d(
+            "CustomAudioSource",
+            "TIMESTAMP DEBUG: totalSamplesSent(before)=$totalSamplesSent, audioDataSize=$audioDataSize, frameSize=$frameSize, bytesPerSample=$bytesPerSample, samplesInFrame=$samplesInFrame, timestampInUs=$timestampInUs"
+        )
         result.timestampInUs = timestampInUs
-        android.util.Log.w("CustomAudioSource", "Before return: result.timestampInUs=${result.timestampInUs}, totalSamplesSent=$totalSamplesSent")
-        android.util.Log.d("CustomAudioSource", "getAudioFrame returning frame with buffer size: $audioDataSize, timestampInUs: $timestampInUs, samplesInFrame: $samplesInFrame, totalSamplesSent: $totalSamplesSent")
         totalSamplesSent += samplesInFrame
+        android.util.Log.d(
+            "CustomAudioSource",
+            "TIMESTAMP DEBUG: totalSamplesSent(after)=$totalSamplesSent"
+        )
         return result
     }
 
