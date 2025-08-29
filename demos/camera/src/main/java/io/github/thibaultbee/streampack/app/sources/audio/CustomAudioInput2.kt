@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
 import java.nio.ByteBuffer
 
 class CustomAudioInput2(private val audioSource: Int) : IAudioSourceInternal {
-    private var audioRecord: AudioRecord? = null
+    private var audioRecordWrapper: AudioRecordWrapper? = null
     private var bufferSize: Int? = null
 
     private val _isStreamingFlow = MutableStateFlow(false)
@@ -30,24 +30,25 @@ class CustomAudioInput2(private val audioSource: Int) : IAudioSourceInternal {
     }
 
     override suspend fun configure(config: AudioSourceConfig) {
-        audioRecord?.release()
+        audioRecordWrapper?.release()
         bufferSize = AudioRecord.getMinBufferSize(
             config.sampleRate,
             config.channelConfig,
             config.byteFormat
         )
-        audioRecord = AudioRecord(
-            audioSource, // Use the provided audio source from the constructor
+        val audioRecord = AudioRecord(
+            audioSource,
             config.sampleRate,
             config.channelConfig,
             config.byteFormat,
             bufferSize!!
         )
+        audioRecordWrapper = AudioRecordWrapper(audioRecord)
         circularBuffer = CircularPcmBuffer(bufferSize!! * 2) // Double the buffer size for safety
     }
 
     override suspend fun startStream() {
-        audioRecord?.startRecording()
+        audioRecordWrapper?.startRecording()
         _isStreamingFlow.tryEmit(true)
 
         // Start a coroutine to continuously read from AudioRecord and write to the buffer
@@ -55,7 +56,7 @@ class CustomAudioInput2(private val audioSource: Int) : IAudioSourceInternal {
         //     val tempBuffer = ByteBuffer.allocateDirect(bufferSize!!)
         //     while (_isStreamingFlow.value) {
         //         tempBuffer.clear()
-        //         val bytesRead = audioRecord?.read(tempBuffer, tempBuffer.remaining()) ?: 0
+        //         val bytesRead = audioRecordWrapper?.read(tempBuffer.array(), 0, tempBuffer.remaining()) ?: 0
         //         if (bytesRead > 0) {
         //             tempBuffer.flip()
         //             circularBuffer.write(tempBuffer)
@@ -65,19 +66,19 @@ class CustomAudioInput2(private val audioSource: Int) : IAudioSourceInternal {
     }
 
     override suspend fun stopStream() {
-        audioRecord?.stop()
+        audioRecordWrapper?.stop()
         _isStreamingFlow.tryEmit(false)
     }
 
     override fun release() {
-        audioRecord?.release()
-        audioRecord = null
+        audioRecordWrapper?.release()
+        audioRecordWrapper = null
         _isStreamingFlow.tryEmit(false)
     }
 
     override fun getAudioFrame(frameFactory: IReadOnlyRawFrameFactory): RawFrame {
         val buffer = frameFactory.create(bufferSize!!, 0)
-        val length = audioRecord?.read(buffer.rawBuffer, buffer.rawBuffer.remaining()) ?: 0
+        val length = audioRecordWrapper?.read(buffer.rawBuffer.array(), 0, buffer.rawBuffer.remaining()) ?: 0
         if (length > 0) {
             buffer.timestampInUs = System.nanoTime() / 1000
             return buffer
@@ -88,13 +89,9 @@ class CustomAudioInput2(private val audioSource: Int) : IAudioSourceInternal {
     }
 
     override fun fillAudioFrame(frame: RawFrame): RawFrame {
-        val audioRecord = requireNotNull(audioRecord) { "Audio source is not initialized" }
-        if (audioRecord.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
-            throw IllegalStateException("Audio source is not recording")
-        }
-
+        val audioRecordWrapper = requireNotNull(audioRecordWrapper) { "Audio source is not initialized" }
         val buffer = frame.rawBuffer
-        val length = audioRecord.read(buffer, buffer.remaining())
+        val length = audioRecordWrapper.read(buffer.array(), 0, buffer.remaining())
         if (length > 0) {
             frame.timestampInUs = System.nanoTime() / 1000
             return frame
