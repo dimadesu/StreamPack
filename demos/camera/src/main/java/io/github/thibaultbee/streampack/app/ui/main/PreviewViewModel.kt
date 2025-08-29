@@ -35,6 +35,7 @@ import io.github.thibaultbee.streampack.app.BR
 import io.github.thibaultbee.streampack.app.R
 import io.github.thibaultbee.streampack.app.data.rotation.RotationRepository
 import io.github.thibaultbee.streampack.app.data.storage.DataStoreRepository
+import io.github.thibaultbee.streampack.app.sources.audio.CustomAudioInput
 import io.github.thibaultbee.streampack.app.ui.main.usecases.BuildStreamerUseCase
 import io.github.thibaultbee.streampack.app.utils.ObservableViewModel
 import io.github.thibaultbee.streampack.app.utils.dataStore
@@ -252,22 +253,22 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             try {
                 val descriptor = storageRepository.endpointDescriptorFlow.first()
                 // Wait for custom audio source to be ready before starting stream
-                val audioSource = streamer.audioInput?.sourceFlow?.value
-                if (audioSource is io.github.thibaultbee.streampack.app.ui.main.CustomStreamPackAudioSourceInternal) {
-                    Log.i(TAG, "Detected CustomStreamPackAudioSourceInternal in startStream")
-                    val maxWaitMs = 2000
-                    val pollIntervalMs = 50
-                    var waitedMs = 0
-                    while (!audioSource.isReady() && waitedMs < maxWaitMs) {
-                        kotlinx.coroutines.delay(pollIntervalMs.toLong())
-                        waitedMs += pollIntervalMs
-                    }
-                    if (!audioSource.isReady()) {
-                        Log.w(TAG, "Audio buffer not ready after $maxWaitMs ms, starting anyway.")
-                    } else {
-                        Log.i(TAG, "Audio buffer is ready, proceeding to start stream.")
-                    }
-                }
+                // val audioSource = streamer.audioInput?.sourceFlow?.value
+                // if (audioSource is io.github.thibaultbee.streampack.app.ui.main.CustomStreamPackAudioSourceInternal) {
+                //     Log.i(TAG, "Detected CustomStreamPackAudioSourceInternal in startStream")
+                //     val maxWaitMs = 2000
+                //     val pollIntervalMs = 50
+                //     var waitedMs = 0
+                //     while (!audioSource.isReady() && waitedMs < maxWaitMs) {
+                //         kotlinx.coroutines.delay(pollIntervalMs.toLong())
+                //         waitedMs += pollIntervalMs
+                //     }
+                //     if (!audioSource.isReady()) {
+                //         Log.w(TAG, "Audio buffer not ready after $maxWaitMs ms, starting anyway.")
+                //     } else {
+                //         Log.i(TAG, "Audio buffer is ready, proceeding to start stream.")
+                //     }
+                // }
                 Log.i(TAG, "Calling streamer.startStream with descriptor: $descriptor")
                 streamer.startStream(descriptor)
 
@@ -364,7 +365,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 //            kotlinx.coroutines.delay(5000)
             val nextAudioSource = when (videoSource) {
                 is ICameraSource -> {
-                    CustomStreamPackAudioSourceInternal.Factory()
+                    CustomAudioInput.Factory()
                 }
                 is CustomStreamPackSourceInternal -> {
                     MicrophoneSourceFactory()
