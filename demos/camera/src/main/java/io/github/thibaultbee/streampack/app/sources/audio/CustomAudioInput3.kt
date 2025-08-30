@@ -67,8 +67,12 @@ class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
             buffer.timestampInUs = System.nanoTime() / 1000
             return buffer
         } else {
-            buffer.close()
-            throw IllegalStateException("Failed to read audio data")
+            android.util.Log.w(TAG, "Failed to read audio data, filling buffer with blanks.")
+            while (buffer.rawBuffer.hasRemaining()) {
+                buffer.rawBuffer.put(0) // Fill with blanks (zeros)
+            }
+            buffer.timestampInUs = System.nanoTime() / 1000
+            return buffer
         }
     }
 
@@ -80,8 +84,12 @@ class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
             frame.timestampInUs = System.nanoTime() / 1000
             return frame
         } else {
-            frame.close()
-            throw IllegalStateException("Failed to read audio data")
+            android.util.Log.w(TAG, "Failed to read audio data, filling frame with blanks.")
+            while (buffer.hasRemaining()) {
+                buffer.put(0) // Fill with blanks (zeros)
+            }
+            frame.timestampInUs = System.nanoTime() / 1000
+            return frame
         }
     }
 
