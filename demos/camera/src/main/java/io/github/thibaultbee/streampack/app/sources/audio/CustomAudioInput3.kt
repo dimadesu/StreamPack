@@ -34,11 +34,9 @@ class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
 
         val safeBufferSize = bufferSize ?: return
 
-        val pcmBuffer = CircularPcmBuffer(safeBufferSize * 320)
+        val pcmBuffer = CircularPcmBuffer(safeBufferSize * 32000)
         val renderersFactory = CustomAudioRenderersFactory(ctx, pcmBuffer)
         val exoPlayerInstance = ExoPlayer.Builder(ctx, renderersFactory).build()
-
-        android.util.Log.d("CustomAudioSource", "audioBuffer identity (assigned): ${System.identityHashCode(pcmBuffer)}")
         audioRecordWrapper = AudioRecordWrapper3(ctx, exoPlayerInstance, pcmBuffer)
         audioRecordWrapper?.config()
 
@@ -81,7 +79,6 @@ class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
         val buffer = frame.rawBuffer
         val length = audioRecordWrapper.read(buffer, buffer.remaining())
         android.util.Log.d(TAG, "fillAudioFrame called with buffer size: ${buffer.remaining()} and length: $length")
-        frame.timestampInUs = System.nanoTime() / 1000
         if (length == 0) {
 //            android.util.Log.w(TAG, "Failed to read audio data, filling frame with a sine wave pattern.")
 //            val frequency = 440.0 // Frequency of the sine wave in Hz
@@ -105,6 +102,7 @@ class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
                 buffer.put(0)
             }
         }
+        frame.timestampInUs = System.nanoTime() / 1000
         buffer.flip()
         return frame
     }
