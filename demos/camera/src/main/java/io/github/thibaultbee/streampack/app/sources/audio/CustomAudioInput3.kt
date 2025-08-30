@@ -25,13 +25,12 @@ class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
 
     override suspend fun configure(config: AudioSourceConfig) {
         audioRecordWrapper?.release()
-        val ctx = requireNotNull(context) { "Context must be set before configure" }
-
         bufferSize = AudioRecord.getMinBufferSize(
             config.sampleRate,
             config.channelConfig,
             config.byteFormat
         )
+        val ctx = requireNotNull(context) { "Context must be set before configure" }
 
         val safeBufferSize = bufferSize ?: return
 
@@ -57,6 +56,7 @@ class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
 
     override fun release() {
         audioRecordWrapper?.release()
+        audioRecordWrapper = null
         _isStreamingFlow.tryEmit(false)
     }
 
