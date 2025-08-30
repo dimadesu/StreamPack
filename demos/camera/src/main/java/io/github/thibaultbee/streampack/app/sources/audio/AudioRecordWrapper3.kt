@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import androidx.media3.common.MediaItem
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import io.github.thibaultbee.streampack.app.ui.main.CircularPcmBuffer
@@ -25,11 +26,7 @@ class AudioRecordWrapper3(
         withContext(Dispatchers.Main) {
             val mediaItem = MediaItem.fromUri("rtmp://localhost:1935/publish/live")
             val mediaSource = ProgressiveMediaSource.Factory(
-                try {
-                    androidx.media3.datasource.rtmp.RtmpDataSource.Factory()
-                } catch (e: Exception) {
-                    androidx.media3.datasource.DefaultDataSource.Factory(context)
-                }
+                DefaultDataSource.Factory(context)
             ).createMediaSource(mediaItem)
             exoPlayer?.setMediaSource(mediaSource)
 //            exoPlayer?.prepare()

@@ -24,6 +24,7 @@ class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
     }
 
     override suspend fun configure(config: AudioSourceConfig) {
+        audioRecordWrapper?.release()
         val ctx = requireNotNull(context) { "Context must be set before configure" }
 
         bufferSize = AudioRecord.getMinBufferSize(

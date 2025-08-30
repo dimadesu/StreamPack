@@ -14,14 +14,7 @@ class CustomMedia3AudioRenderer(
     mediaCodecSelector: MediaCodecSelector,
     private val audioBuffer: CircularPcmBuffer
 ) : MediaCodecAudioRenderer(context, mediaCodecSelector) {
-    private var lastPresentationTimeUs: Long = C.TIME_UNSET
-
     private val _isDecodeOnlyBuffer = true
-
-    override fun onPositionReset(positionUs: Long, joining: Boolean) {
-        super.onPositionReset(positionUs, joining)
-        lastPresentationTimeUs = C.TIME_UNSET
-    }
 
     override fun processOutputBuffer(
         positionUs: Long,
@@ -36,12 +29,6 @@ class CustomMedia3AudioRenderer(
         isLastBuffer: Boolean,
         format: Format
     ): Boolean {
-        // Assert monotonic timestamps
-//        if (lastPresentationTimeUs != C.TIME_UNSET) {
-//            Assertions.checkState(bufferPresentationTimeUs >= lastPresentationTimeUs)
-//        }
-//        lastPresentationTimeUs = bufferPresentationTimeUs
-
         // Intercept decoded audio data
         if (buffer != null) {
             val bytesWritten = audioBuffer.write(buffer)
