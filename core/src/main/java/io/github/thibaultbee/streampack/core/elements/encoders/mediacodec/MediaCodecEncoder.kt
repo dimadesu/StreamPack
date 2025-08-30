@@ -479,9 +479,19 @@ internal constructor(
                     return
                 }
 
+                // Debugging: Log frame details before queuing
+                Logger.d(tag, "Queueing input frame: index=$index, frameSize=${frame.rawBuffer.remaining()}, timestamp=${frame.timestampInUs}")
+
                 // Validate frame size
                 if (!frame.rawBuffer.hasRemaining()) {
-                    Logger.w(tag, "Skipping frame with size 0")
+                    Logger.w(tag, "Frame size is 0, queuing an empty buffer.")
+                    mediaCodec.queueInputBuffer(
+                        index,
+                        0,
+                        0,
+                        frame.timestampInUs,
+                        0
+                    )
                     return
                 }
 
@@ -492,6 +502,9 @@ internal constructor(
                     return
                 }
 
+                // Debugging: Log buffer size details
+                Logger.d(tag, "Input buffer size: $size, MediaCodec buffer remaining: ${mediaCodec.getInputBuffer(index)?.remaining()}")
+
                 // Queue the input buffer
                 mediaCodec.queueInputBuffer(
                     index,
@@ -500,6 +513,9 @@ internal constructor(
                     frame.timestampInUs,
                     0
                 )
+
+                // Debugging: Confirm successful queuing
+                Logger.d(tag, "Successfully queued input frame: index=$index, size=$size, timestamp=${frame.timestampInUs}")
             } catch (e: IllegalArgumentException) {
                 Logger.e(tag, "Failed to queue input buffer: ${e.message}")
                 Logger.e(tag, "Buffer index: $index, Frame size: ${frame.rawBuffer.remaining()}, Timestamp: ${frame.timestampInUs}")

@@ -270,9 +270,8 @@ internal class EncodingPipelineOutput(
     override fun queueAudioFrame(frame: RawFrame) {
         val encoder = requireNotNull(audioEncoderInternal) { "Audio is not configured" }
         val input = encoder.input as IEncoderInternal.ISyncByteBufferInput
-        input.queueInputFrame(
-            frame
-        )
+        Logger.d(TAG, "Queueing audio frame with timestamp: ${frame.timestampInUs} and size: ${frame.rawBuffer.remaining()}")
+        input.queueInputFrame(frame)
     }
 
     private suspend fun setAudioCodecConfigInternal(audioCodecConfig: AudioCodecConfig) {

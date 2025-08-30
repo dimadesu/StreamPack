@@ -80,13 +80,25 @@ class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
         val audioRecordWrapper = requireNotNull(audioRecordWrapper) { "Audio source is not initialized" }
         val buffer = frame.rawBuffer
         val length = audioRecordWrapper.read(buffer, buffer.remaining())
+        android.util.Log.d(TAG, "fillAudioFrame called with buffer size: ${buffer.remaining()} and length: $length")
         if (length > 0) {
             frame.timestampInUs = System.nanoTime() / 1000
             return frame
         } else {
-            android.util.Log.w(TAG, "Failed to read audio data, filling frame with blanks.")
+            android.util.Log.w(TAG, "Failed to read audio data, filling frame with a sine wave pattern.")
+            val frequency = 440.0 // Frequency of the sine wave in Hz
+            val sampleRate = 44100 // Sample rate in Hz
+            val amplitude = 32767 // Max amplitude for 16-bit PCM
+            var phase = 0.0
+            val phaseIncrement = 2.0 * Math.PI * frequency / sampleRate
+
             while (buffer.hasRemaining()) {
-                buffer.put(0) // Fill with blanks (zeros)
+                val sample = (amplitude * Math.sin(phase)).toInt()
+                buffer.putShort(sample.toShort())
+                phase += phaseIncrement
+                if (phase >= 2.0 * Math.PI) {
+                    phase -= 2.0 * Math.PI
+                }
             }
             frame.timestampInUs = System.nanoTime() / 1000
             return frame
