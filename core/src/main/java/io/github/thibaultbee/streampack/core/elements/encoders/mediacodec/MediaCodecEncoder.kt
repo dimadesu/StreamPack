@@ -473,48 +473,23 @@ internal constructor(
         ) {
             try {
                 // Validate MediaCodec state
-                if (!state.isRunning) {
-                    Logger.w(tag, "Cannot queue input frame: Encoder is not running. State: $state")
-                    return
-                }
-
-                // Validate buffer index
-                if (index < 0) {
-                    Logger.e(tag, "Invalid buffer index: $index")
-                    return
-                }
-
-                // Debugging: Log frame details before queuing
-//                Logger.d(tag, "Queueing input frame: index=$index, frameSize=${frame.rawBuffer.remaining()}, timestamp=${frame.timestampInUs}")
-
-                // Validate frame size
-                // if (!frame.rawBuffer.hasRemaining()) {
-                //     Logger.w(tag, "Frame size is 0, queuing an empty buffer.")
-                //     mediaCodec.queueInputBuffer(
-                //         index,
-                //         0,
-                //         0,
-                //         frame.timestampInUs,
-                //         0
-                //     )
-                //     return
-                // }
-
-                // Validate frame parameters
-                // TODO
-                val size = frame.rawBuffer.remaining()
-                // val size = min(frame.rawBuffer.remaining(), mediaCodec.getInputBuffer(index)?.remaining() ?: 0)
-//                if (size <= 0) {
-//                    Logger.e(tag, "Invalid frame size after validation: $size")
+//                if (!state.isRunning) {
+//                    Logger.w(tag, "Cannot queue input frame: Encoder is not running. State: $state")
+//                    return
+//                }
+//
+//                // Validate buffer index
+//                if (index < 0) {
+//                    Logger.e(tag, "Invalid buffer index: $index")
 //                    return
 //                }
 
-                // Debugging: Log buffer size details
-                Logger.d(tag, "Input buffer size: $size, MediaCodec buffer remaining: ${mediaCodec.getInputBuffer(index)?.remaining()}")
+                // Debugging: Log frame details before queuing
+               Logger.d(tag, "Queueing input frame: index=$index, frame.rawBuffer.position()=${frame.rawBuffer.position()}, frame.rawBuffer.limit()=${frame.rawBuffer.limit()}, timestamp=${frame.timestampInUs}")
 
 //                 Validate frame size
-                 if (size == 0) {
-                     Logger.w(tag, "Frame size is 0, queuing an empty buffer.")
+                 if (!frame.rawBuffer.hasRemaining()) {
+                     Logger.w(tag, "Queuing an empty buffer. !frame.rawBuffer.hasRemaining()=${!frame.rawBuffer.hasRemaining()}")
                      mediaCodec.queueInputBuffer(
                          index,
                          0,
@@ -524,6 +499,32 @@ internal constructor(
                      )
                      return
                  }
+
+                // Validate frame parameters
+                // TODO
+//                val size = frame.rawBuffer.remaining()
+//                // val size = min(frame.rawBuffer.remaining(), mediaCodec.getInputBuffer(index)?.remaining() ?: 0)
+////                if (size <= 0) {
+////                    Logger.e(tag, "Invalid frame size after validation: $size")
+////                    return
+////                }
+//
+//                // Debugging: Log buffer size details
+//                Logger.d(tag, "Input buffer size: $size, MediaCodec buffer remaining: ${mediaCodec.getInputBuffer(index)?.remaining()}")
+
+//                 Validate frame size
+//                 if (size == 0) {
+//                     Logger.w(tag, "Frame size is 0, queuing an empty buffer.")
+//                     mediaCodec.queueInputBuffer(
+//                         index,
+//                         0,
+//                         0,
+//                         frame.timestampInUs,
+//                         0
+//                     )
+//                     return
+//                 }
+
 
                 // Queue the input buffer
                 mediaCodec.queueInputBuffer(
@@ -535,7 +536,7 @@ internal constructor(
                 )
 
                 // Debugging: Confirm successful queuing
-                Logger.d(tag, "Successfully queued input frame: index=$index, size=$size, timestamp=${frame.timestampInUs}")
+//                Logger.d(tag, "Successfully queued input frame: index=$index, size=$size, timestamp=${frame.timestampInUs}")
             } catch (e: IllegalArgumentException) {
                 Logger.e(tag, "Failed to queue input buffer: ${e.message}")
                 Logger.e(tag, "Buffer index: $index, Frame size: ${frame.rawBuffer.remaining()}, Timestamp: ${frame.timestampInUs}")

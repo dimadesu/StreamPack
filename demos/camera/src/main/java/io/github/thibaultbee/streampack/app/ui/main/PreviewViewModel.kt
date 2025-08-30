@@ -131,7 +131,8 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 // Set audio source and video source
                 if (streamer.withAudio) {
                     Log.i(TAG, "Audio source is enabled. Setting audio source")
-                    streamer.setAudioSource(MicrophoneSourceFactory())
+                    // streamer.setAudioSource(MicrophoneSourceFactory())
+                    streamer.setAudioSource(CustomAudioInput3.Factory())
                 } else {
                     Log.i(TAG, "Audio source is disabled")
                 }
@@ -347,12 +348,12 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         val videoSource = streamer.videoInput?.sourceFlow?.value
         viewModelScope.launch {
             val nextSource = when (videoSource) {
-                is ICameraSource -> {
-                    CustomStreamPackSourceInternal.Factory()
-                }
-                is IBitmapSource -> {
-                    CameraSourceFactory()
-                }
+//                is ICameraSource -> {
+//                    CustomStreamPackSourceInternal.Factory()
+//                }
+//                is IBitmapSource -> {
+//                    CameraSourceFactory()
+//                }
                 is CustomStreamPackSourceInternal -> {
                     CameraSourceFactory()
                 }
