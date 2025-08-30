@@ -36,14 +36,14 @@ class CircularPcmBuffer(private val bufferSize: Int) {
     fun read(dest: ByteBuffer, size: Int): Int {
         val bytesToRead = minOf(size, availableBytes)
         var bytesRead = 0
-        android.util.Log.d(TAG, "read(ByteBuffer): requested=$size availableBefore=$availableBytes readPos=$readPos writePos=$writePos")
+        android.util.Log.d(TAG, "(read from renderer-write to encoder): requested=$size availableBefore=$availableBytes readPos=$readPos writePos=$writePos")
         while (bytesRead < bytesToRead) {
             dest.put(buffer[readPos])
             readPos = (readPos + 1) % bufferSize
             bytesRead++
         }
         availableBytes -= bytesRead
-        android.util.Log.d(TAG, "read(ByteBuffer): bytesRead=$bytesRead availableAfter=$availableBytes readPos=$readPos writePos=$writePos")
+        android.util.Log.d(TAG, "(read from renderer-write to encoder): bytesRead=$bytesRead availableAfter=$availableBytes readPos=$readPos writePos=$writePos")
         return bytesRead
     }
 
@@ -56,14 +56,14 @@ class CircularPcmBuffer(private val bufferSize: Int) {
         val freeSpace = bufferSize - availableBytes
         val bytesToWrite = minOf(length, freeSpace)
         var bytesWritten = 0
-        android.util.Log.d(TAG, "write(ByteBuffer): requested=$length freeSpaceBefore=$freeSpace availableBefore=$availableBytes readPos=$readPos writePos=$writePos")
+        android.util.Log.i(TAG, "write-to-circular-buffer: requested=$length freeSpaceBefore=$freeSpace availableBefore=$availableBytes readPos=$readPos writePos=$writePos")
         while (bytesWritten < bytesToWrite) {
             buffer[writePos] = src.get()
             writePos = (writePos + 1) % bufferSize
             bytesWritten++
         }
         availableBytes += bytesWritten
-        android.util.Log.d(TAG, "write(ByteBuffer): bytesWritten=$bytesWritten availableAfter=$availableBytes readPos=$readPos writePos=$writePos")
+//        android.util.Log.d(TAG, "write-to-circular-buffer: bytesWritten=$bytesWritten availableAfter=$availableBytes readPos=$readPos writePos=$writePos")
         return bytesWritten
     }
 }

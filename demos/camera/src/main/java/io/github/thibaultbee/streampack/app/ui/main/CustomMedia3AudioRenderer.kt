@@ -31,9 +31,8 @@ class CustomMedia3AudioRenderer(
     ): Boolean {
         // Intercept decoded audio data
         if (buffer != null) {
+//            android.util.Log.i("CustomMedia3AudioRenderer", "(render-write)")
             val bytesWritten = audioBuffer.write(buffer)
-            android.util.Log.i("CustomMedia3AudioRenderer", "processOutputBuffer: wrote $bytesWritten bytes to audioBuffer")
-            android.util.Log.d("CustomMedia3AudioRenderer", "audioBuffer identity (write): ${System.identityHashCode(audioBuffer)} available after write: ${audioBuffer.available()}")
         }
 
 

@@ -415,6 +415,7 @@ internal constructor(
             }
         }
 
+//
         override fun onInputBufferAvailable(codec: MediaCodec, index: Int) {
             encoderExecutor.execute {
                 when {
@@ -430,9 +431,12 @@ internal constructor(
 
                     else -> {
                         val frame = try {
+                            //
                             val buffer = requireNotNull(mediaCodec.getInputBuffer(index))
+                            //
                             input.listener.onFrameRequested(buffer)
                         } catch (t: Throwable) {
+                            //
                             Logger.e(tag, "Failed to get input buffer: $t")
                             Logger.e(tag, "MediaCodec state: $state")
                             Logger.e(tag, "Thread: ${Thread.currentThread().name}")
@@ -480,7 +484,7 @@ internal constructor(
                 }
 
                 // Debugging: Log frame details before queuing
-                Logger.d(tag, "Queueing input frame: index=$index, frameSize=${frame.rawBuffer.remaining()}, timestamp=${frame.timestampInUs}")
+//                Logger.d(tag, "Queueing input frame: index=$index, frameSize=${frame.rawBuffer.remaining()}, timestamp=${frame.timestampInUs}")
 
                 // Validate frame size
                 if (!frame.rawBuffer.hasRemaining()) {
