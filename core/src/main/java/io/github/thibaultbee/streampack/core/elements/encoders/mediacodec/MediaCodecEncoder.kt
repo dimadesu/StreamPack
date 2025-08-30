@@ -37,6 +37,7 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.Executor
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlin.math.max
 import kotlin.math.min
 
 /**
@@ -487,34 +488,49 @@ internal constructor(
 //                Logger.d(tag, "Queueing input frame: index=$index, frameSize=${frame.rawBuffer.remaining()}, timestamp=${frame.timestampInUs}")
 
                 // Validate frame size
-                if (!frame.rawBuffer.hasRemaining()) {
-                    Logger.w(tag, "Frame size is 0, queuing an empty buffer.")
-                    mediaCodec.queueInputBuffer(
-                        index,
-                        0,
-                        0,
-                        frame.timestampInUs,
-                        0
-                    )
-                    return
-                }
+                // if (!frame.rawBuffer.hasRemaining()) {
+                //     Logger.w(tag, "Frame size is 0, queuing an empty buffer.")
+                //     mediaCodec.queueInputBuffer(
+                //         index,
+                //         0,
+                //         0,
+                //         frame.timestampInUs,
+                //         0
+                //     )
+                //     return
+                // }
 
                 // Validate frame parameters
-                val size = min(frame.rawBuffer.remaining(), mediaCodec.getInputBuffer(index)?.remaining() ?: 0)
-                if (size <= 0) {
-                    Logger.e(tag, "Invalid frame size after validation: $size")
-                    return
-                }
+                // TODO
+                val size = frame.rawBuffer.remaining()
+                // val size = min(frame.rawBuffer.remaining(), mediaCodec.getInputBuffer(index)?.remaining() ?: 0)
+//                if (size <= 0) {
+//                    Logger.e(tag, "Invalid frame size after validation: $size")
+//                    return
+//                }
 
                 // Debugging: Log buffer size details
                 Logger.d(tag, "Input buffer size: $size, MediaCodec buffer remaining: ${mediaCodec.getInputBuffer(index)?.remaining()}")
+
+//                 Validate frame size
+                 if (size == 0) {
+                     Logger.w(tag, "Frame size is 0, queuing an empty buffer.")
+                     mediaCodec.queueInputBuffer(
+                         index,
+                         0,
+                         0,
+                         frame.timestampInUs,
+                         0
+                     )
+                     return
+                 }
 
                 // Queue the input buffer
                 mediaCodec.queueInputBuffer(
                     index,
                     frame.rawBuffer.position(),
-                    size,
-                    frame.timestampInUs,
+                    frame.rawBuffer.limit(),
+                    frame.timestampInUs /* in us */,
                     0
                 )
 

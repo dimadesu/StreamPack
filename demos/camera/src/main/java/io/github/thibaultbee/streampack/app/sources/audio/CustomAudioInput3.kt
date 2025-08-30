@@ -85,6 +85,7 @@ class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
             frame.timestampInUs = System.nanoTime() / 1000
             return frame
         } else {
+            frame.timestampInUs = System.nanoTime() / 1000
             android.util.Log.w(TAG, "Failed to read audio data, filling frame with a sine wave pattern.")
             val frequency = 440.0 // Frequency of the sine wave in Hz
             val sampleRate = 44100 // Sample rate in Hz
@@ -100,7 +101,6 @@ class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
                     phase -= 2.0 * Math.PI
                 }
             }
-            frame.timestampInUs = System.nanoTime() / 1000
             return frame
         }
     }
