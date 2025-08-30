@@ -53,7 +53,7 @@ class AudioRecordWrapper3(
      */
     suspend fun stop() {
         withContext(Dispatchers.Main) {
-            exoPlayer?.playWhenReady = false
+            exoPlayer?.stop()
         }
     }
 
