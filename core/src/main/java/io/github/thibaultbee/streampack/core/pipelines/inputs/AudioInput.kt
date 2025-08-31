@@ -396,7 +396,7 @@ private class CallbackAudioPort(private val audioFrameProcessor: AudioFrameProce
     var audioFrameRequestedListener: OnFrameRequestedListener =
         object : OnFrameRequestedListener {
             override fun onFrameRequested(buffer: ByteBuffer): RawFrame {
-                android.util.Log.d("CallbackAudioPort", "onFrameRequested called with buffer size: ${buffer.remaining()}")
+//                android.util.Log.d("CallbackAudioPort", "onFrameRequested called with buffer size: ${buffer.remaining()}")
                 val getFrame = requireNotNull(getFrame) {
                     "Audio frame requested listener is not set yet"
                 }

@@ -72,7 +72,7 @@ class BufferVisualizerView @JvmOverloads constructor(
                 }
             }
         } finally {
-            android.util.Log.d("BufferVisualizerView", "Canvas unlocked and posted")
+//            android.util.Log.d("BufferVisualizerView", "Canvas unlocked and posted")
             holder.unlockCanvasAndPost(canvas)
         }
     }

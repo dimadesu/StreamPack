@@ -485,11 +485,11 @@ internal constructor(
 //                }
 
                 // Debugging: Log frame details before queuing
-               Logger.d(tag, "Queueing input frame: index=$index, frame.rawBuffer.position()=${frame.rawBuffer.position()}, frame.rawBuffer.limit()=${frame.rawBuffer.limit()}, timestamp=${frame.timestampInUs}")
+//               Logger.d(tag, "Queueing input frame: index=$index, frame.rawBuffer.position()=${frame.rawBuffer.position()}, frame.rawBuffer.limit()=${frame.rawBuffer.limit()}, timestamp=${frame.timestampInUs}")
 
 //                 Validate frame size
                  if (!frame.rawBuffer.hasRemaining()) {
-                     Logger.w(tag, "Queuing an empty buffer. !frame.rawBuffer.hasRemaining()=${!frame.rawBuffer.hasRemaining()}")
+//                     Logger.w(tag, "Queuing an empty buffer. !frame.rawBuffer.hasRemaining()=${!frame.rawBuffer.hasRemaining()}")
                      mediaCodec.queueInputBuffer(
                          index,
                          0,

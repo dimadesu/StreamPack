@@ -66,6 +66,7 @@ class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
             buffer.timestampInUs = System.nanoTime() / 1000
             return buffer
         } else {
+            // TODO
             android.util.Log.w(TAG, "Failed to read audio data, filling buffer with blanks.")
             while (buffer.rawBuffer.hasRemaining()) {
                 buffer.rawBuffer.put(0) // Fill with blanks (zeros)
@@ -79,7 +80,7 @@ class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
         val audioRecordWrapper = requireNotNull(audioRecordWrapper) { "Audio source is not initialized" }
         val buffer = frame.rawBuffer
         val length = audioRecordWrapper.read(buffer, buffer.remaining())
-        android.util.Log.d(TAG, "fillAudioFrame called with buffer size: ${buffer.remaining()} and length: $length")
+//        android.util.Log.d(TAG, "fillAudioFrame called with buffer size: ${buffer.remaining()} and length: $length")
         frame.timestampInUs = System.nanoTime() / 1000
         buffer.flip()
         return frame
