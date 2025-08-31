@@ -48,6 +48,7 @@ import io.github.thibaultbee.streampack.core.configuration.mediadescriptor.UriMe
 import io.github.thibaultbee.streampack.core.elements.endpoints.MediaSinkType
 import io.github.thibaultbee.streampack.core.elements.sources.audio.audiorecord.IAudioRecordSource
 import io.github.thibaultbee.streampack.core.elements.sources.audio.audiorecord.MicrophoneSourceFactory
+import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoSource
 import io.github.thibaultbee.streampack.core.elements.sources.video.bitmap.IBitmapSource
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.CameraSettings
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.CameraSourceFactory
@@ -332,38 +333,23 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         viewModelScope.launch {
             val nextSource = when (videoSource) {
                 is ICameraSource -> {
-                    CustomStreamPackSourceInternal.Factory()
+                    streamer.setVideoSource(CustomStreamPackSourceInternal.Factory())
+                    streamer.setAudioSource(CustomAudioInput3.Factory(bufferVisualizerModel))
                 }
-                is IBitmapSource -> {
-                    CameraSourceFactory()
-                }
+//                is IBitmapSource -> {
+//                    CameraSourceFactory()
+//                }
                 is CustomStreamPackSourceInternal -> {
-                    CameraSourceFactory()
+                    streamer.setVideoSource(CameraSourceFactory())
+                    streamer.setAudioSource(MicrophoneSourceFactory())
                 }
                 else -> {
                     Log.i(TAG, "Unknown video source. Fallback to camera sources")
-                    CameraSourceFactory()
+                    streamer.setVideoSource(CameraSourceFactory())
+                    streamer.setAudioSource(MicrophoneSourceFactory())
                 }
             }
             Log.i(TAG, "Switch video source to $nextSource")
-            streamer.setVideoSource(nextSource)
-
-//            kotlinx.coroutines.delay(5000)
-            val nextAudioSource = when (videoSource) {
-                is ICameraSource -> {
-                    CustomAudioInput3.Factory(bufferVisualizerModel)
-                }
-                is CustomStreamPackSourceInternal -> {
-                    MicrophoneSourceFactory()
-                }
-                else -> {
-                    Log.i(TAG, "Unknown video source. Fallback to microphone source")
-                    MicrophoneSourceFactory()
-                }
-            }
-            Log.i(TAG, "Switch audio source to $nextAudioSource")
-            streamer.setAudioSource(nextAudioSource)
-
         }
     }
 
