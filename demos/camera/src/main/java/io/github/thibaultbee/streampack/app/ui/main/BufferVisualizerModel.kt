@@ -10,20 +10,11 @@ object BufferVisualizerModel {
 
     var circularPcmBuffer: CircularPcmBuffer? = null
 
-    /**
-     * Release the CircularPcmBuffer and clean up resources.
-     */
-    fun releaseCircularPcmBuffer() {
-        circularPcmBuffer?.clear()
-        circularPcmBuffer = null
-        Log.i(TAG, "CircularPcmBuffer released.")
-    }
+    var isStreaming: Boolean = false
 
-    /**
-     * Release all managed resources.
-     */
-    fun releaseAllResources() {
-        releaseCircularPcmBuffer()
+    fun release() {
+        isStreaming = false
+        circularPcmBuffer = null
         Log.i(TAG, "All resources released.")
     }
 }

@@ -50,16 +50,18 @@ class CustomAudioInput3(
 
     override suspend fun startStream() {
         audioRecordWrapper?.startRecording()
-        // TODO
+        bufferVisualizerModel.isStreaming = true
         _isStreamingFlow.tryEmit(true)
     }
 
     override suspend fun stopStream() {
+        bufferVisualizerModel.isStreaming = false
         audioRecordWrapper?.stop()
         _isStreamingFlow.tryEmit(false)
     }
 
     override fun release() {
+        bufferVisualizerModel.release()
         audioRecordWrapper?.release()
         audioRecordWrapper = null
         _isStreamingFlow.tryEmit(false)
