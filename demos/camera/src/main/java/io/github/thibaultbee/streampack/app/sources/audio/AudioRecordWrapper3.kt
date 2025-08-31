@@ -14,12 +14,23 @@ import java.nio.ByteBuffer
 
 class AudioRecordWrapper3(private val context: Context) {
     private var exoPlayer: ExoPlayer? = null
-    public lateinit var audioBuffer: CircularPcmBuffer
 
     companion object {
         private const val TAG = "AudioRecordWrapper3"
     }
 
+    /**
+     * The audio buffer used for PCM data.
+     */
+    public var audioBuffer: CircularPcmBuffer? = null
+        private set
+
+    /**
+     * Configures the AudioRecordWrapper with the given ExoPlayer and audio buffer.
+     *
+     * @param exoPlayer The ExoPlayer instance to be used for playback.
+     * @param audioBuffer The CircularPcmBuffer instance used for audio buffering.
+     */
     suspend fun config(exoPlayer: ExoPlayer, audioBuffer: CircularPcmBuffer) {
         this.exoPlayer = exoPlayer
         this.audioBuffer = audioBuffer
@@ -38,7 +49,7 @@ class AudioRecordWrapper3(private val context: Context) {
      * Starts recording audio. Add custom behavior here if needed.
      */
     suspend fun startRecording() {
-        audioBuffer.clear()
+        audioBuffer?.clear()
         android.util.Log.i(TAG, "Audio buffer cleared before streaming start.")
         withContext(Dispatchers.Main) {
             exoPlayer?.prepare()
@@ -59,6 +70,7 @@ class AudioRecordWrapper3(private val context: Context) {
      * Reads audio data into the provided buffer.
      */
     fun read(buffer: ByteBuffer, size: Int): Int {
+        val audioBuffer = this.audioBuffer ?: throw IllegalStateException("audioBuffer is not initialized. Call config() first.")
         // Read data from CircularPcmBuffer into the ByteBuffer
         val bytesRead = audioBuffer.read(buffer, size)
 
@@ -79,6 +91,6 @@ class AudioRecordWrapper3(private val context: Context) {
                 exoPlayer = null
             }
         }
-        audioBuffer.clear()
+        audioBuffer?.clear()
     }
 }

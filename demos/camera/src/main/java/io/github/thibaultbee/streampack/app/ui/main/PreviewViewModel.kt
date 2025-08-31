@@ -130,6 +130,19 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         application,
     )
 
+    private val _audioBufferLiveData = MutableLiveData<CircularPcmBuffer>()
+    val audioBufferLiveData: LiveData<CircularPcmBuffer> = _audioBufferLiveData
+
+    init {
+        viewModelScope.launch {
+            // Wait for audioBuffer to be initialized
+            while (audioRecordWrapper.audioBuffer == null) {
+                kotlinx.coroutines.delay(100) // Poll every 100ms
+            }
+            _audioBufferLiveData.postValue(audioRecordWrapper.audioBuffer)
+        }
+    }
+
     init {
         viewModelScope.launch {
             streamerFlow.collect {

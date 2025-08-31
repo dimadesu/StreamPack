@@ -60,6 +60,9 @@ class CircularPcmBuffer(private val bufferSize: Int) {
             return 0
         }
 
+        android.util.Log.d(TAG, "(read): isFilling=$isFilling, availableBytes=$availableBytes, fillThreshold=$fillThreshold")
+        android.util.Log.d(TAG, "(read): currentTime=$currentTime, lastReadTime=$lastReadTime, readInterval=$readInterval")
+
         var bytesRead = 0
         // Buffer is in the draining phase, read data into mediaCodecBuffer
         val bytesToRead = minOf(size, availableBytes)
@@ -78,6 +81,10 @@ class CircularPcmBuffer(private val bufferSize: Int) {
             isFilling = true
             android.util.Log.d(TAG, "(read): Transitioning to filling phase. Buffer fully drained.")
         }
+
+        android.util.Log.d(TAG, "(read): isFilling=$isFilling, availableBytes=$availableBytes, fillThreshold=$fillThreshold")
+        android.util.Log.d(TAG, "(read): currentTime=$currentTime, lastReadTime=$lastReadTime, readInterval=$readInterval")
+        android.util.Log.d(TAG, "(read): bytesToRead=$bytesToRead, bytesRead=$bytesRead")
 
         return bytesRead
     }
@@ -101,4 +108,16 @@ class CircularPcmBuffer(private val bufferSize: Int) {
 //        android.util.Log.d(TAG, "write-to-circular-buffer: bytesWritten=$bytesWritten availableAfter=$availableBytes readPos=$readPos writePos=$writePos")
         return bytesWritten
     }
+
+    val buffer: ByteArray
+        get() = playerBuffer
+
+    val readPosition: Int
+        get() = readPos
+
+    val writePosition: Int
+        get() = writePos
+
+    val availableData: Int
+        get() = availableBytes
 }

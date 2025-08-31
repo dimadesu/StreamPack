@@ -193,5 +193,14 @@
 
 
         </LinearLayout>
+
+        <io.github.thibaultbee.streampack.app.ui.views.BufferVisualizerView
+            android:id="@+id/bufferVisualizer"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            app:layout_constraintBottom_toTopOf="@+id/liveButton"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginBottom="16dp" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 </layout>
