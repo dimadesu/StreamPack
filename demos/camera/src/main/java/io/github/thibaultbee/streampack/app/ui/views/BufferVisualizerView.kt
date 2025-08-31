@@ -24,8 +24,8 @@ class BufferVisualizerView @JvmOverloads constructor(
     var audioRecordWrapper: AudioRecordWrapper3? = null
         set(value) {
             field = value
-            android.util.Log.d("BufferVisualizerView", "audioRecordWrapper updated")
-            drawBuffer() // Trigger a redraw when the wrapper updates
+//            android.util.Log.d("BufferVisualizerView", "audioRecordWrapper updated")
+//            drawBuffer() // Trigger a redraw when the wrapper updates
         }
 
     private var scheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor()
@@ -78,12 +78,12 @@ class BufferVisualizerView @JvmOverloads constructor(
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {
-        drawBuffer() // Draw the initial state when the surface is created
+//        drawBuffer() // Draw the initial state when the surface is created
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-        android.util.Log.d("BufferVisualizerView", "Surface changed, forcing redraw")
-        drawBuffer() // Redraw when the surface changes
+//        android.util.Log.d("BufferVisualizerView", "Surface changed, forcing redraw")
+//        drawBuffer() // Redraw when the surface changes
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
