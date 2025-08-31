@@ -198,9 +198,9 @@
             android:id="@+id/bufferVisualizer"
             android:layout_width="match_parent"
             android:layout_height="50dp"
-            app:layout_constraintBottom_toTopOf="@+id/liveButton"
+            app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            android:layout_marginBottom="16dp" />
+            android:layout_marginTop="64dp" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 </layout>
