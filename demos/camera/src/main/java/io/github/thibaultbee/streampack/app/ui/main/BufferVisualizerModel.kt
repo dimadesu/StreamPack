@@ -1,6 +1,8 @@
 package io.github.thibaultbee.streampack.app.ui.main
 
 import android.util.Log
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
 
 /**
  * A centralized model to handle the lifecycle of resources like buffers for the Buffer Visualizer.
@@ -10,10 +12,15 @@ object BufferVisualizerModel {
 
     var circularPcmBuffer: CircularPcmBuffer? = null
 
-    var isStreaming: Boolean = false
+    private val _isStreaming = MutableLiveData(false)
+    val isStreaming: LiveData<Boolean> get() = _isStreaming
+
+    fun setStreamingState(isStreaming: Boolean) {
+        _isStreaming.value = isStreaming
+    }
 
     fun release() {
-        isStreaming = false
+        setStreamingState(false)
         circularPcmBuffer = null
         Log.i(TAG, "All resources released.")
     }

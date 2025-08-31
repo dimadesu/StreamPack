@@ -199,7 +199,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
 
     private fun stopStream() {
         previewViewModel.stopStream()
-        binding.bufferVisualizer.stopDrawing() // Stop visualization
     }
 
     private fun showPermissionError(vararg permissions: String) {
@@ -268,7 +267,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                 requireContext(), *permissions.toTypedArray()
             ) -> {
                 startStream()
-                binding.bufferVisualizer.startDrawing() // Start visualization
             }
 
             else -> {

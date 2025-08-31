@@ -70,16 +70,11 @@ class BufferVisualizerView @JvmOverloads constructor(
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {
-//        drawBuffer() // Draw the initial state when the surface is created
-
-        // Observe the isStreaming state in the model
-        bufferVisualizerModel?.let { model ->
-            model.isStreaming.let { isStreaming ->
-                if (isStreaming) {
-                    startDrawing()
-                } else {
-                    stopDrawing()
-                }
+        bufferVisualizerModel?.isStreaming?.observeForever { isStreaming ->
+            if (isStreaming) {
+                startDrawing()
+            } else {
+                stopDrawing()
             }
         }
     }
@@ -92,6 +87,7 @@ class BufferVisualizerView @JvmOverloads constructor(
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
+        bufferVisualizerModel?.isStreaming?.removeObserver { }
         stopDrawing()
         bufferVisualizerModel = null // Remove reference to avoid memory leaks
     }
