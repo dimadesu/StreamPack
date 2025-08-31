@@ -48,6 +48,7 @@ import io.github.thibaultbee.streampack.core.configuration.mediadescriptor.UriMe
 import io.github.thibaultbee.streampack.core.elements.endpoints.MediaSinkType
 import io.github.thibaultbee.streampack.core.elements.sources.audio.audiorecord.IAudioRecordSource
 import io.github.thibaultbee.streampack.core.elements.sources.audio.audiorecord.MicrophoneSourceFactory
+import io.github.thibaultbee.streampack.core.elements.sources.video.bitmap.IBitmapSource
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.CameraSettings
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.CameraSourceFactory
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.ICameraSource
@@ -331,12 +332,12 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         val videoSource = streamer.videoInput?.sourceFlow?.value
         viewModelScope.launch {
             val nextSource = when (videoSource) {
-//                is ICameraSource -> {
-//                    CustomStreamPackSourceInternal.Factory()
-//                }
-//                is IBitmapSource -> {
-//                    CameraSourceFactory()
-//                }
+                is ICameraSource -> {
+                    CustomStreamPackSourceInternal.Factory()
+                }
+                is IBitmapSource -> {
+                    CameraSourceFactory()
+                }
                 is CustomStreamPackSourceInternal -> {
                     CameraSourceFactory()
                 }

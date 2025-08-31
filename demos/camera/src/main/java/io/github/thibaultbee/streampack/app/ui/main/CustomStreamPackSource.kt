@@ -36,9 +36,9 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), IVideoSource
     }
 
     override suspend fun stopStream() {
-        withContext(Dispatchers.Main) {
-            exoPlayer?.playWhenReady = false
-        }
+//        withContext(Dispatchers.Main) {
+            exoPlayer?.stop()
+//        }
         _isStreamingFlow.value = false
     }
 
@@ -112,7 +112,7 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), IVideoSource
 
     override suspend fun stopPreview() {
         withContext(Dispatchers.Main) {
-            previewPlayer?.playWhenReady = false
+            previewPlayer?.stop()
             previewPlayer?.setVideoSurface(null)
         }
         _isPreviewingFlow.value = false
@@ -164,7 +164,8 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), IVideoSource
                 previewPlayer.playWhenReady = true
             }
             customSrc.exoPlayer = exoPlayer
-            customSrc.previewPlayer = previewPlayer
+            // TODO: Too much echo
+//            customSrc.previewPlayer = previewPlayer
             return customSrc
         }
 
