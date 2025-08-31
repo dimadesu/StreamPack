@@ -13,7 +13,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
-    private var audioRecordWrapper: AudioRecordWrapper3? = null
+    var audioRecordWrapper: AudioRecordWrapper3? = null
+        private set
     private var bufferSize: Int? = null
 
     private val _isStreamingFlow = MutableStateFlow(false)
@@ -37,8 +38,8 @@ class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
         val pcmBuffer = CircularPcmBuffer(safeBufferSize * 50)
         val renderersFactory = CustomAudioRenderersFactory(ctx, pcmBuffer)
         val exoPlayerInstance = ExoPlayer.Builder(ctx, renderersFactory).build()
-        audioRecordWrapper = AudioRecordWrapper3(ctx, exoPlayerInstance, pcmBuffer)
-        audioRecordWrapper?.config()
+        // audioRecordWrapper = AudioRecordWrapper3(ctx)
+        audioRecordWrapper?.config(exoPlayerInstance, pcmBuffer)
 
     }
 
@@ -84,9 +85,11 @@ class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
         return frame
     }
 
-    class Factory : IAudioSourceInternal.Factory {
+    class Factory(private val audioRecordWrapper: AudioRecordWrapper3) : IAudioSourceInternal.Factory {
         override suspend fun create(context: Context): IAudioSourceInternal {
-            return CustomAudioInput3(context)
+            val customAudioInput = CustomAudioInput3(context)
+            customAudioInput.audioRecordWrapper = audioRecordWrapper
+            return customAudioInput
         }
 
         override fun isSourceEquals(source: IAudioSourceInternal?): Boolean {

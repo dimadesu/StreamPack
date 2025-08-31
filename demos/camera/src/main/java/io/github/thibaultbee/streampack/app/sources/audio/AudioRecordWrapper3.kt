@@ -12,30 +12,28 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.nio.ByteBuffer
 
-class AudioRecordWrapper3(
-    private val context: Context,
-    private var exoPlayer: ExoPlayer? = null,
-    private val audioBuffer: CircularPcmBuffer
-) {
+class AudioRecordWrapper3(private val context: Context) {
+    private var exoPlayer: ExoPlayer? = null
+    public lateinit var audioBuffer: CircularPcmBuffer
 
     companion object {
         private const val TAG = "AudioRecordWrapper3"
     }
 
-    suspend fun config() {
+    suspend fun config(exoPlayer: ExoPlayer, audioBuffer: CircularPcmBuffer) {
+        this.exoPlayer = exoPlayer
+        this.audioBuffer = audioBuffer
         withContext(Dispatchers.Main) {
             val mediaItem = MediaItem.fromUri("rtmp://localhost:1935/publish/live")
             val mediaSource = ProgressiveMediaSource.Factory(
                 DefaultDataSource.Factory(context)
             ).createMediaSource(mediaItem)
-            exoPlayer?.setMediaSource(mediaSource)
+            this@AudioRecordWrapper3.exoPlayer?.setMediaSource(mediaSource)
 //            exoPlayer?.prepare()
 //            exoPlayer?.playWhenReady = true
         }
     }
 
-    init {
-    }
     /**
      * Starts recording audio. Add custom behavior here if needed.
      */

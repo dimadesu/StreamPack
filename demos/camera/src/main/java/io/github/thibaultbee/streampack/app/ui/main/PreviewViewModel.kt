@@ -35,6 +35,7 @@ import io.github.thibaultbee.streampack.app.BR
 import io.github.thibaultbee.streampack.app.R
 import io.github.thibaultbee.streampack.app.data.rotation.RotationRepository
 import io.github.thibaultbee.streampack.app.data.storage.DataStoreRepository
+import io.github.thibaultbee.streampack.app.sources.audio.AudioRecordWrapper3
 import io.github.thibaultbee.streampack.app.sources.audio.CustomAudioInput
 import io.github.thibaultbee.streampack.app.sources.audio.CustomAudioInput2
 import io.github.thibaultbee.streampack.app.sources.audio.CustomAudioInput3
@@ -125,6 +126,10 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     private val _isTryingConnectionLiveData = MutableLiveData<Boolean>()
     val isTryingConnectionLiveData: LiveData<Boolean> = _isTryingConnectionLiveData
 
+    private val audioRecordWrapper: AudioRecordWrapper3 = AudioRecordWrapper3(
+        application,
+    )
+
     init {
         viewModelScope.launch {
             streamerFlow.collect {
@@ -132,7 +137,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 if (streamer.withAudio) {
                     Log.i(TAG, "Audio source is enabled. Setting audio source")
                     // streamer.setAudioSource(MicrophoneSourceFactory())
-                    streamer.setAudioSource(CustomAudioInput3.Factory())
+                    streamer.setAudioSource(CustomAudioInput3.Factory(audioRecordWrapper))
                 } else {
                     Log.i(TAG, "Audio source is disabled")
                 }
@@ -255,23 +260,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             _isTryingConnectionLiveData.postValue(true)
             try {
                 val descriptor = storageRepository.endpointDescriptorFlow.first()
-                // Wait for custom audio source to be ready before starting stream
-                // val audioSource = streamer.audioInput?.sourceFlow?.value
-                // if (audioSource is io.github.thibaultbee.streampack.app.ui.main.CustomStreamPackAudioSourceInternal) {
-                //     Log.i(TAG, "Detected CustomStreamPackAudioSourceInternal in startStream")
-                //     val maxWaitMs = 2000
-                //     val pollIntervalMs = 50
-                //     var waitedMs = 0
-                //     while (!audioSource.isReady() && waitedMs < maxWaitMs) {
-                //         kotlinx.coroutines.delay(pollIntervalMs.toLong())
-                //         waitedMs += pollIntervalMs
-                //     }
-                //     if (!audioSource.isReady()) {
-                //         Log.w(TAG, "Audio buffer not ready after $maxWaitMs ms, starting anyway.")
-                //     } else {
-                //         Log.i(TAG, "Audio buffer is ready, proceeding to start stream.")
-                //     }
-                // }
                 Log.i(TAG, "Calling streamer.startStream with descriptor: $descriptor")
                 streamer.startStream(descriptor)
 
@@ -368,7 +356,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 //            kotlinx.coroutines.delay(5000)
             val nextAudioSource = when (videoSource) {
                 is ICameraSource -> {
-                    CustomAudioInput3.Factory()
+                    CustomAudioInput3.Factory(audioRecordWrapper)
                 }
                 is CustomStreamPackSourceInternal -> {
                     MicrophoneSourceFactory()
