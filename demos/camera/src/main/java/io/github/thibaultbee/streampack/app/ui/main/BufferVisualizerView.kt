@@ -30,6 +30,17 @@ class BufferVisualizerView @JvmOverloads constructor(
         holder.setFormat(PixelFormat.TRANSPARENT)
         setZOrderOnTop(true) // Ensure the SurfaceView is drawn on top
         holder.addCallback(this)
+
+        // Observe the isStreaming state in the model
+        bufferVisualizerModel?.let { model ->
+            model.isStreaming.let { isStreaming ->
+                if (isStreaming) {
+                    startDrawing()
+                } else {
+                    stopDrawing()
+                }
+            }
+        }
     }
 
     private fun drawBuffer() {
