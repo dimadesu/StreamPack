@@ -60,10 +60,14 @@ class AudioRecordWrapper3(private val context: Context) {
     /**
      * Stops recording audio.
      */
-    suspend fun stop() {
-        withContext(Dispatchers.Main) {
+    fun stop() {
+        // I don't know why this doesn't seem to need this main thread thing.
+        // It actually breaks transition to setting activity if it's enabled here
+        // I think audio input's stopStream is called on activity destroy or smth like that
+        // Also maybe smth to do with suspend
+//       withContext(Dispatchers.Main) {
             exoPlayer?.stop()
-        }
+//       }
     }
 
     /**
