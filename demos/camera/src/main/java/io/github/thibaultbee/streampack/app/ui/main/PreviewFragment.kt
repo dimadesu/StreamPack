@@ -177,10 +177,10 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             }
         }
 
-        // Observe audioBufferLiveData and update BufferVisualizerView
-        previewViewModel.audioBufferLiveData.observe(viewLifecycleOwner) { buffer ->
-            android.util.Log.d("PreviewFragment", "audioBuffer updated: available=${buffer?.available()} capacity=${buffer?.capacity}")
-            binding.bufferVisualizer.audioBuffer = buffer
+        // Observe audioRecordWrapperLiveData and update BufferVisualizerView
+        previewViewModel.audioRecordWrapperLiveData.observe(viewLifecycleOwner) { wrapper ->
+            android.util.Log.d("PreviewFragment", "audioRecordWrapper updated")
+            binding.bufferVisualizer.audioRecordWrapper = wrapper
         }
     }
 

@@ -132,14 +132,16 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     private val _audioBufferLiveData = MutableLiveData<CircularPcmBuffer>()
     val audioBufferLiveData: LiveData<CircularPcmBuffer> = _audioBufferLiveData
+    private val _audioRecordWrapperLiveData = MutableLiveData(audioRecordWrapper)
+    val audioRecordWrapperLiveData: LiveData<AudioRecordWrapper3> = _audioRecordWrapperLiveData
 
     init {
         viewModelScope.launch {
-            // Wait for audioBuffer to be initialized
+            // Wait for audioRecordWrapper to be initialized
             while (audioRecordWrapper.audioBuffer == null) {
                 kotlinx.coroutines.delay(100) // Poll every 100ms
             }
-            _audioBufferLiveData.postValue(audioRecordWrapper.audioBuffer)
+            _audioRecordWrapperLiveData.postValue(audioRecordWrapper)
         }
     }
 

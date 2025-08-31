@@ -7,7 +7,7 @@ import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.SurfaceHolder
 import android.view.SurfaceView
-import io.github.thibaultbee.streampack.app.ui.main.CircularPcmBuffer
+import io.github.thibaultbee.streampack.app.sources.audio.AudioRecordWrapper3
 import java.nio.ByteBuffer
 
 class BufferVisualizerView @JvmOverloads constructor(
@@ -21,11 +21,11 @@ class BufferVisualizerView @JvmOverloads constructor(
         style = Paint.Style.FILL
     }
 
-    var audioBuffer: CircularPcmBuffer? = null
+    var audioRecordWrapper: AudioRecordWrapper3? = null
         set(value) {
             field = value
-            android.util.Log.d("BufferVisualizerView", "audioBuffer updated: ${value?.availableData}")
-            drawBuffer() // Trigger a redraw when the buffer updates
+            android.util.Log.d("BufferVisualizerView", "audioRecordWrapper updated")
+            drawBuffer() // Trigger a redraw when the wrapper updates
         }
 
     private val scheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor()
@@ -34,19 +34,6 @@ class BufferVisualizerView @JvmOverloads constructor(
         holder.setFormat(android.graphics.PixelFormat.TRANSPARENT)
         setZOrderOnTop(true) // Ensure the SurfaceView is drawn on top
         holder.addCallback(this)
-
-        // Temporary: Populate a real CircularPcmBuffer with dummy data for testing
-//        val dummyBuffer = CircularPcmBuffer(100)
-//        val dummyData = ByteArray(100) { (it % 256).toByte() } // Simulate 100 bytes of varying data
-//        val byteBuffer = java.nio.ByteBuffer.wrap(dummyData)
-//        dummyBuffer.write(byteBuffer)
-//        audioBuffer = dummyBuffer
-
-        // Schedule periodic redraw on a background thread
-        scheduler.scheduleAtFixedRate({
-            drawBuffer() // Trigger the redraw
-//            android.util.Log.d("BufferVisualizerView", "Periodic drawBuffer() called")
-        }, 0, 200, java.util.concurrent.TimeUnit.MILLISECONDS)
     }
 
     private fun drawBuffer() {
@@ -60,23 +47,28 @@ class BufferVisualizerView @JvmOverloads constructor(
             // Clear the canvas at the start
             canvas.drawColor(Color.BLACK)
 
-            audioBuffer?.let { buffer ->
-                val availableData = buffer.availableData
-                val bufferSize = buffer.buffer.size
+            audioRecordWrapper?.let { wrapper ->
+                val buffer = wrapper.audioBuffer
+
+                if (buffer != null) {
+                    val bufferSize = buffer.capacity
+                    val availableData = buffer.availableData
 //                android.util.Log.d("BufferVisualizerView", "Available data: $availableData, Buffer size: $bufferSize")
 
-                if (bufferSize > 0) {
-                    // Calculate the fill percentage
-                    val fillPercentage = availableData.toFloat() / bufferSize
+                    if (bufferSize > 0) {
+                        // Calculate the fill percentage
+                        val fillPercentage = availableData.toFloat() / bufferSize
 //                    android.util.Log.d("BufferVisualizerView", "Fill percentage: $fillPercentage")
 
-                    // Calculate the bar width based on the fill percentage
-                    val barWidth = (fillPercentage * width).coerceAtLeast(5f) // Minimum width of 5 pixels
-                    val left = 0f
-                    val right = barWidth
+                        // Calculate the bar width based on the fill percentage
+                        val barWidth = (fillPercentage * width).coerceAtLeast(5f) // Minimum width of 5 pixels
+                        val left = 0f
+                        val right = barWidth
 
-                    // Draw a single bar representing the fill percentage
-                    canvas.drawRect(left, 0f, right, height.toFloat(), paint)
+                        // Draw a single bar representing the fill percentage
+                        canvas.drawRect(left, 0f, right, height.toFloat(), paint)
+                    }
+
                 }
             }
         } finally {
@@ -95,7 +87,16 @@ class BufferVisualizerView @JvmOverloads constructor(
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
-        scheduler.shutdown() // Stop the periodic redraw
-        // No-op
+        stopDrawing()
+    }
+
+    fun startDrawing() {
+        scheduler.scheduleAtFixedRate({
+            drawBuffer() // Trigger the redraw
+        }, 0, 200, java.util.concurrent.TimeUnit.MILLISECONDS)
+    }
+
+    fun stopDrawing() {
+        scheduler.shutdownNow() // Stop the periodic redraw immediately
     }
 }
