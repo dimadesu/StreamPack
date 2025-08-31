@@ -32,7 +32,7 @@ class CircularPcmBuffer(private val bufferSize: Int) {
     private var isFilling = true // Tracks whether the buffer is in the filling phase
 
     private var lastReadTime = 0L // Tracks the last time the read method was called
-    private val readInterval = 20L // Minimum interval between reads in milliseconds
+    private val readInterval = 22L // Minimum interval between reads in milliseconds
 
     /**
      * Reads up to [dest.remaining()] bytes into [mediaCodecBuffer] ByteBuffer.
