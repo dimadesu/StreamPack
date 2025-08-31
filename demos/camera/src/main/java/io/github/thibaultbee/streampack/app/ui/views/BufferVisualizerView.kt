@@ -45,12 +45,12 @@ class BufferVisualizerView @JvmOverloads constructor(
         // Schedule periodic redraw on a background thread
         scheduler.scheduleAtFixedRate({
             drawBuffer() // Trigger the redraw
-            android.util.Log.d("BufferVisualizerView", "Periodic drawBuffer() called")
+//            android.util.Log.d("BufferVisualizerView", "Periodic drawBuffer() called")
         }, 0, 200, java.util.concurrent.TimeUnit.MILLISECONDS)
     }
 
     private fun drawBuffer() {
-        android.util.Log.d("BufferVisualizerView", "drawBuffer() called")
+//        android.util.Log.d("BufferVisualizerView", "drawBuffer() called")
         val canvas = holder.lockCanvas()
         if (canvas == null) {
             android.util.Log.e("BufferVisualizerView", "Failed to lock canvas")
@@ -63,12 +63,12 @@ class BufferVisualizerView @JvmOverloads constructor(
             audioBuffer?.let { buffer ->
                 val availableData = buffer.availableData
                 val bufferSize = buffer.buffer.size
-                android.util.Log.d("BufferVisualizerView", "Available data: $availableData, Buffer size: $bufferSize")
+//                android.util.Log.d("BufferVisualizerView", "Available data: $availableData, Buffer size: $bufferSize")
 
                 if (bufferSize > 0) {
                     // Calculate the fill percentage
                     val fillPercentage = availableData.toFloat() / bufferSize
-                    android.util.Log.d("BufferVisualizerView", "Fill percentage: $fillPercentage")
+//                    android.util.Log.d("BufferVisualizerView", "Fill percentage: $fillPercentage")
 
                     // Calculate the bar width based on the fill percentage
                     val barWidth = (fillPercentage * width).coerceAtLeast(5f) // Minimum width of 5 pixels
