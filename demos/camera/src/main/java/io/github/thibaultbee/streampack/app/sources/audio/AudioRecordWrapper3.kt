@@ -39,7 +39,7 @@ class AudioRecordWrapper3(private val context: Context) {
             val mediaSource = ProgressiveMediaSource.Factory(
                 DefaultDataSource.Factory(context)
             ).createMediaSource(mediaItem)
-            this@AudioRecordWrapper3.exoPlayer?.setMediaSource(mediaSource)
+            exoPlayer.setMediaSource(mediaSource)
 //            exoPlayer?.prepare()
 //            exoPlayer?.playWhenReady = true
         }
