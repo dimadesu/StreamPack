@@ -132,8 +132,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 // Set audio source and video source
                 if (streamer.withAudio) {
                     Log.i(TAG, "Audio source is enabled. Setting audio source")
-                    // streamer.setAudioSource(MicrophoneSourceFactory())
-                    streamer.setAudioSource(CustomAudioInput3.Factory(bufferVisualizerModel))
+                    streamer.setAudioSource(MicrophoneSourceFactory())
                 } else {
                     Log.i(TAG, "Audio source is disabled")
                 }
