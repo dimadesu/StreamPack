@@ -28,52 +28,55 @@ class CircularPcmBuffer(private val bufferSize: Int) {
         availableBytes = 0
     }
 
-    private val fillThreshold = (bufferSize * 0.6).toInt() // 60% of the buffer size
+    private val fillThreshold = (bufferSize * 0.8).toInt() // 80% of the buffer size
     private var isFilling = true // Tracks whether the buffer is in the filling phase
+
+    private var lastReadTime = 0L // Tracks the last time the read method was called
+    private val readInterval = 20L // Minimum interval between reads in milliseconds
 
     /**
      * Reads up to [dest.remaining()] bytes into [mediaCodecBuffer] ByteBuffer.
      * Returns the number of bytes actually read.
      */
     fun read(mediaCodecBuffer: ByteBuffer, size: Int): Int {
-        var bytesRead = 0
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - lastReadTime < readInterval) {
+            android.util.Log.d(TAG, "(read): Throttled. Too soon since last read.")
+            return 0 // Return immediately if called too soon
+        }
+
+        lastReadTime = currentTime // Update the last read time
+
 
         if (isFilling) {
-            // // Buffer is in the filling phase, fill mediaCodecBuffer with zeros
-            // repeat(size) {
-            //     mediaCodecBuffer.put(0)
-            // }
-            // android.util.Log.d(TAG, "(read): Buffer in filling phase. Filled mediaCodecBuffer with zeros, size=$size")
+            // Buffer is in the filling phase, skip filling mediaCodecBuffer
+            android.util.Log.d(TAG, "(read): Buffer in filling phase. Skipping fill, size=$size")
 
-             // Transition to draining phase if the buffer reaches the threshold
-             if (availableBytes >= fillThreshold) {
-                 isFilling = false
-                 android.util.Log.d(TAG, "(read): Transitioning to draining phase. availableBytes=$availableBytes")
-             }
-        } else {
-            // Buffer is in the draining phase, read data into mediaCodecBuffer
-            val bytesToRead = minOf(size, availableBytes)
-            android.util.Log.d(TAG, "(read): requested=$size availableBefore=$availableBytes readPos=$readPos writePos=$writePos")
-            while (bytesRead < bytesToRead) {
-                mediaCodecBuffer.put(playerBuffer[readPos])
-                readPos = (readPos + 1) % bufferSize
-                bytesRead++
+            // Transition to draining phase if the buffer reaches the threshold
+            if (availableBytes >= fillThreshold) {
+                isFilling = false
+                android.util.Log.d(TAG, "(read): Transitioning to draining phase. availableBytes=$availableBytes")
             }
-            availableBytes -= bytesRead
+            return 0
+        }
 
-            // Fill the rest of the mediaCodecBuffer with zeros if needed
-            val remaining = size - bytesRead
-            repeat(remaining) {
-                mediaCodecBuffer.put(0)
-            }
+        var bytesRead = 0
+        // Buffer is in the draining phase, read data into mediaCodecBuffer
+        val bytesToRead = minOf(size, availableBytes)
+        android.util.Log.d(TAG, "(read): requested=$size availableBefore=$availableBytes readPos=$readPos writePos=$writePos")
+        while (bytesRead < bytesToRead) {
+            mediaCodecBuffer.put(playerBuffer[readPos])
+            readPos = (readPos + 1) % bufferSize
+            bytesRead++
+        }
+        availableBytes -= bytesRead
 
-            android.util.Log.d(TAG, "(read): bytesRead=$bytesRead, filledWithZeros=${size - bytesRead}, availableAfter=$availableBytes readPos=$readPos writePos=$writePos")
+        android.util.Log.d(TAG, "(read): bytesRead=$bytesRead, availableAfter=$availableBytes readPos=$readPos writePos=$writePos")
 
-            // Transition back to filling phase if the buffer is fully drained
-            if (availableBytes == 0) {
-                isFilling = true
-                android.util.Log.d(TAG, "(read): Transitioning to filling phase. Buffer fully drained.")
-            }
+        // Transition back to filling phase if the buffer is fully drained
+        if (availableBytes == 0) {
+            isFilling = true
+            android.util.Log.d(TAG, "(read): Transitioning to filling phase. Buffer fully drained.")
         }
 
         return bytesRead

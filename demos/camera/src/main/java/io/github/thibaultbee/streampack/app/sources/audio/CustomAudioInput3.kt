@@ -34,7 +34,7 @@ class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
 
         val safeBufferSize = bufferSize ?: return
 
-        val pcmBuffer = CircularPcmBuffer(safeBufferSize * 10)
+        val pcmBuffer = CircularPcmBuffer(safeBufferSize * 100)
         val renderersFactory = CustomAudioRenderersFactory(ctx, pcmBuffer)
         val exoPlayerInstance = ExoPlayer.Builder(ctx, renderersFactory).build()
         audioRecordWrapper = AudioRecordWrapper3(ctx, exoPlayerInstance, pcmBuffer)
