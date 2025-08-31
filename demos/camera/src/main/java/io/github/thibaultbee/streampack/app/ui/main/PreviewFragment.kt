@@ -176,12 +176,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                 Log.e(TAG, "Can't start preview, streamer is not a IVideoStreamer")
             }
         }
-
-        // Observe audioRecordWrapperLiveData and update BufferVisualizerView
-        previewViewModel.audioRecordWrapperLiveData.observe(viewLifecycleOwner) { wrapper ->
-            android.util.Log.d("PreviewFragment", "audioRecordWrapper updated")
-            binding.bufferVisualizer.audioRecordWrapper = wrapper
-        }
     }
 
     private fun lockOrientation() {

@@ -30,6 +30,12 @@ class BufferVisualizerView @JvmOverloads constructor(
 //            drawBuffer() // Trigger a redraw when the wrapper updates
         }
 
+    var bufferVisualizerModel: BufferVisualizerModel? = null
+        set(value) {
+            field = value
+            audioRecordWrapper = value?.getCircularPcmBuffer()?.let { AudioRecordWrapper3(context) }
+        }
+
     private var scheduler = Executors.newSingleThreadScheduledExecutor()
 
     init {

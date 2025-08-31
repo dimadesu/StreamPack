@@ -36,10 +36,9 @@ import io.github.thibaultbee.streampack.app.R
 import io.github.thibaultbee.streampack.app.data.rotation.RotationRepository
 import io.github.thibaultbee.streampack.app.data.storage.DataStoreRepository
 import io.github.thibaultbee.streampack.app.sources.audio.AudioRecordWrapper3
-import io.github.thibaultbee.streampack.app.sources.audio.CustomAudioInput
-import io.github.thibaultbee.streampack.app.sources.audio.CustomAudioInput2
 import io.github.thibaultbee.streampack.app.sources.audio.CustomAudioInput3
 import io.github.thibaultbee.streampack.app.ui.main.usecases.BuildStreamerUseCase
+import io.github.thibaultbee.streampack.app.ui.main.BufferVisualizerModel
 import io.github.thibaultbee.streampack.app.utils.ObservableViewModel
 import io.github.thibaultbee.streampack.app.utils.dataStore
 import io.github.thibaultbee.streampack.app.utils.isEmpty
@@ -49,8 +48,6 @@ import io.github.thibaultbee.streampack.core.configuration.mediadescriptor.UriMe
 import io.github.thibaultbee.streampack.core.elements.endpoints.MediaSinkType
 import io.github.thibaultbee.streampack.core.elements.sources.audio.audiorecord.IAudioRecordSource
 import io.github.thibaultbee.streampack.core.elements.sources.audio.audiorecord.MicrophoneSourceFactory
-import io.github.thibaultbee.streampack.core.elements.sources.video.bitmap.BitmapSourceFactory
-import io.github.thibaultbee.streampack.core.elements.sources.video.bitmap.IBitmapSource
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.CameraSettings
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.CameraSourceFactory
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.ICameraSource
@@ -126,6 +123,8 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     private val _isTryingConnectionLiveData = MutableLiveData<Boolean>()
     val isTryingConnectionLiveData: LiveData<Boolean> = _isTryingConnectionLiveData
 
+    private val bufferVisualizerModel: BufferVisualizerModel = BufferVisualizerModel
+
     private val audioRecordWrapper: AudioRecordWrapper3 = AudioRecordWrapper3(
         application,
     )
@@ -150,7 +149,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 if (streamer.withAudio) {
                     Log.i(TAG, "Audio source is enabled. Setting audio source")
                     // streamer.setAudioSource(MicrophoneSourceFactory())
-                    streamer.setAudioSource(CustomAudioInput3.Factory(audioRecordWrapper))
+                    streamer.setAudioSource(CustomAudioInput3.Factory(bufferVisualizerModel))
                 } else {
                     Log.i(TAG, "Audio source is disabled")
                 }
@@ -369,7 +368,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 //            kotlinx.coroutines.delay(5000)
             val nextAudioSource = when (videoSource) {
                 is ICameraSource -> {
-                    CustomAudioInput3.Factory(audioRecordWrapper)
+                    CustomAudioInput3.Factory(bufferVisualizerModel)
                 }
                 is CustomStreamPackSourceInternal -> {
                     MicrophoneSourceFactory()
@@ -552,6 +551,10 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         showLensDistanceSlider.postValue(false)
         lensDistanceRange.postValue(settings.focus.availableLensDistanceRange)
         lensDistance = 0f
+    }
+
+    fun getBufferVisualizerModel(): BufferVisualizerModel {
+        return bufferVisualizerModel
     }
 
     override fun onCleared() {

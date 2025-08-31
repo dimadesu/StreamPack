@@ -3,6 +3,7 @@ package io.github.thibaultbee.streampack.app.sources.audio
 import android.content.Context
 import android.media.AudioRecord
 import androidx.media3.exoplayer.ExoPlayer
+import io.github.thibaultbee.streampack.app.ui.main.BufferVisualizerModel
 import io.github.thibaultbee.streampack.app.ui.main.CircularPcmBuffer
 import io.github.thibaultbee.streampack.app.ui.main.CustomAudioRenderersFactory
 import io.github.thibaultbee.streampack.core.elements.data.RawFrame
@@ -12,7 +13,10 @@ import io.github.thibaultbee.streampack.core.elements.utils.pool.IReadOnlyRawFra
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
+class CustomAudioInput3(
+    private val context: Context,
+    private val bufferVisualizerModel: BufferVisualizerModel
+) : IAudioSourceInternal {
     var audioRecordWrapper: AudioRecordWrapper3? = null
         private set
     private var bufferSize: Int? = null
@@ -38,7 +42,7 @@ class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
         val pcmBuffer = CircularPcmBuffer(safeBufferSize * 64)
         val renderersFactory = CustomAudioRenderersFactory(ctx, pcmBuffer)
         val exoPlayerInstance = ExoPlayer.Builder(ctx, renderersFactory).build()
-        // audioRecordWrapper = AudioRecordWrapper3(ctx)
+        audioRecordWrapper = AudioRecordWrapper3(ctx)
         audioRecordWrapper?.config(exoPlayerInstance, pcmBuffer)
 
     }
@@ -86,10 +90,9 @@ class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
         return frame
     }
 
-    class Factory(private val audioRecordWrapper: AudioRecordWrapper3) : IAudioSourceInternal.Factory {
+    class Factory(private val bufferVisualizerModel: BufferVisualizerModel) : IAudioSourceInternal.Factory {
         override suspend fun create(context: Context): IAudioSourceInternal {
-            val customAudioInput = CustomAudioInput3(context)
-            customAudioInput.audioRecordWrapper = audioRecordWrapper
+            val customAudioInput = CustomAudioInput3(context, bufferVisualizerModel)
             return customAudioInput
         }
 
