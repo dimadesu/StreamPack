@@ -1,14 +1,16 @@
-package io.github.thibaultbee.streampack.app.ui.views
+package io.github.thibaultbee.streampack.app.ui.main
 
 import android.content.Context
-import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.PixelFormat
 import android.util.AttributeSet
+import android.util.Log
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import io.github.thibaultbee.streampack.app.sources.audio.AudioRecordWrapper3
-import java.nio.ByteBuffer
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 class BufferVisualizerView @JvmOverloads constructor(
     context: Context,
@@ -28,10 +30,10 @@ class BufferVisualizerView @JvmOverloads constructor(
 //            drawBuffer() // Trigger a redraw when the wrapper updates
         }
 
-    private var scheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor()
+    private var scheduler = Executors.newSingleThreadScheduledExecutor()
 
     init {
-        holder.setFormat(android.graphics.PixelFormat.TRANSPARENT)
+        holder.setFormat(PixelFormat.TRANSPARENT)
         setZOrderOnTop(true) // Ensure the SurfaceView is drawn on top
         holder.addCallback(this)
     }
@@ -40,7 +42,7 @@ class BufferVisualizerView @JvmOverloads constructor(
 //        android.util.Log.d("BufferVisualizerView", "drawBuffer() called")
         val canvas = holder.lockCanvas()
         if (canvas == null) {
-            android.util.Log.e("BufferVisualizerView", "Failed to lock canvas")
+            Log.e("BufferVisualizerView", "Failed to lock canvas")
             return
         }
         try {
@@ -92,11 +94,11 @@ class BufferVisualizerView @JvmOverloads constructor(
 
     fun startDrawing() {
         if (scheduler.isShutdown) {
-            scheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor()
+            scheduler = Executors.newSingleThreadScheduledExecutor()
         }
         scheduler.scheduleAtFixedRate({
             drawBuffer() // Trigger the redraw
-        }, 0, 200, java.util.concurrent.TimeUnit.MILLISECONDS)
+        }, 0, 200, TimeUnit.MILLISECONDS)
     }
 
     fun stopDrawing() {

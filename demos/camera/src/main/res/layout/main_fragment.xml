@@ -194,7 +194,7 @@
 
         </LinearLayout>
 
-        <io.github.thibaultbee.streampack.app.ui.views.BufferVisualizerView
+        <io.github.thibaultbee.streampack.app.ui.main.BufferVisualizerView
             android:id="@+id/bufferVisualizer"
             android:layout_width="match_parent"
             android:layout_height="50dp"
