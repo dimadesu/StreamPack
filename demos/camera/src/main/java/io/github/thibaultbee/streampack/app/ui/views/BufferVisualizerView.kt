@@ -36,17 +36,17 @@ class BufferVisualizerView @JvmOverloads constructor(
         holder.addCallback(this)
 
         // Temporary: Populate a real CircularPcmBuffer with dummy data for testing
-        val dummyBuffer = CircularPcmBuffer(100)
-        val dummyData = ByteArray(100) { (it % 256).toByte() } // Simulate 100 bytes of varying data
-        val byteBuffer = java.nio.ByteBuffer.wrap(dummyData)
-        dummyBuffer.write(byteBuffer)
-        audioBuffer = dummyBuffer
+//        val dummyBuffer = CircularPcmBuffer(100)
+//        val dummyData = ByteArray(100) { (it % 256).toByte() } // Simulate 100 bytes of varying data
+//        val byteBuffer = java.nio.ByteBuffer.wrap(dummyData)
+//        dummyBuffer.write(byteBuffer)
+//        audioBuffer = dummyBuffer
 
         // Schedule periodic redraw on a background thread
         scheduler.scheduleAtFixedRate({
             drawBuffer() // Trigger the redraw
             android.util.Log.d("BufferVisualizerView", "Periodic drawBuffer() called")
-        }, 0, 16, java.util.concurrent.TimeUnit.MILLISECONDS) // 60 FPS
+        }, 0, 200, java.util.concurrent.TimeUnit.MILLISECONDS)
     }
 
     private fun drawBuffer() {
