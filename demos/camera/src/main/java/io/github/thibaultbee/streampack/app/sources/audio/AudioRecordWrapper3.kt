@@ -92,5 +92,6 @@ class AudioRecordWrapper3(private val context: Context) {
             }
         }
         audioBuffer?.clear()
+        audioBuffer = null // Explicitly delete the buffer reference
     }
 }

@@ -66,7 +66,7 @@ class CustomAudioInput3(private val context: Context) : IAudioSourceInternal {
             buffer.timestampInUs = System.nanoTime() / 1000
             return buffer
         } else {
-            // TODO
+            // TODO to match what fillAudioFrame does
             android.util.Log.w(TAG, "Failed to read audio data, filling buffer with blanks.")
             while (buffer.rawBuffer.hasRemaining()) {
                 buffer.rawBuffer.put(0) // Fill with blanks (zeros)
