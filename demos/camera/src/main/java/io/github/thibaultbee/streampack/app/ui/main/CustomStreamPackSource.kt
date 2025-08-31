@@ -16,7 +16,9 @@ import io.github.thibaultbee.streampack.core.elements.sources.video.AbstractPrev
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class CustomStreamPackSourceInternal : AbstractPreviewableSource(), IVideoSourceInternal {
+class CustomStreamPackSourceInternal (
+    private val context: Context,
+) : AbstractPreviewableSource(), IVideoSourceInternal {
     override val infoProviderFlow: StateFlow<ISourceInfoProvider> = MutableStateFlow(object : ISourceInfoProvider {
         override fun getSurfaceSize(targetResolution: android.util.Size): android.util.Size = targetResolution
         override val rotationDegrees: Int = 0
@@ -43,6 +45,33 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), IVideoSource
     }
 
     override suspend fun configure(config: VideoSourceConfig) {
+        val rtmpUrl = "rtmp://localhost:1935/publish/live"
+        val mediaItem = MediaItem.fromUri(rtmpUrl)
+        val mediaSource = ProgressiveMediaSource.Factory(
+            try {
+                androidx.media3.datasource.rtmp.RtmpDataSource.Factory()
+            } catch (e: Exception) {
+                androidx.media3.datasource.DefaultDataSource.Factory(context)
+            }
+        ).createMediaSource(mediaItem)
+        val mediaSourcePreview = ProgressiveMediaSource.Factory(
+            try {
+                androidx.media3.datasource.rtmp.RtmpDataSource.Factory()
+            } catch (e: Exception) {
+                androidx.media3.datasource.DefaultDataSource.Factory(context)
+            }
+        ).createMediaSource(mediaItem)
+
+        exoPlayer = ExoPlayer.Builder(context).build()
+        // TODO: Too much echo atm
+//        previewPlayer = ExoPlayer.Builder(context).build()
+
+        withContext(Dispatchers.Main) {
+            exoPlayer?.setMediaSource(mediaSource)
+            previewPlayer?.setMediaSource(mediaSourcePreview)
+            previewPlayer?.prepare()
+            previewPlayer?.playWhenReady = true
+        }
     }
 
     override fun release() {
@@ -136,36 +165,7 @@ class CustomStreamPackSourceInternal : AbstractPreviewableSource(), IVideoSource
 
     class Factory() : IVideoSourceInternal.Factory {
         override suspend fun create(context: Context): IVideoSourceInternal {
-            val customSrc = CustomStreamPackSourceInternal()
-            val rtmpUrl = "rtmp://localhost:1935/publish/live"
-            val mediaItem = MediaItem.fromUri(rtmpUrl)
-            val mediaSource = ProgressiveMediaSource.Factory(
-                try {
-                    androidx.media3.datasource.rtmp.RtmpDataSource.Factory()
-                } catch (e: Exception) {
-                    androidx.media3.datasource.DefaultDataSource.Factory(context)
-                }
-            ).createMediaSource(mediaItem)
-            val mediaSourcePreview = ProgressiveMediaSource.Factory(
-                try {
-                    androidx.media3.datasource.rtmp.RtmpDataSource.Factory()
-                } catch (e: Exception) {
-                    androidx.media3.datasource.DefaultDataSource.Factory(context)
-                }
-            ).createMediaSource(mediaItem)
-
-            val exoPlayer = ExoPlayer.Builder(context).build()
-            val previewPlayer = ExoPlayer.Builder(context).build()
-
-            withContext(Dispatchers.Main) {
-                exoPlayer.setMediaSource(mediaSource)
-                previewPlayer.setMediaSource(mediaSourcePreview)
-                previewPlayer.prepare()
-                previewPlayer.playWhenReady = true
-            }
-            customSrc.exoPlayer = exoPlayer
-            // TODO: Too much echo
-//            customSrc.previewPlayer = previewPlayer
+            val customSrc = CustomStreamPackSourceInternal(context)
             return customSrc
         }
 
