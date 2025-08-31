@@ -16,7 +16,7 @@ object BufferVisualizerModel {
     val isStreaming: LiveData<Boolean> get() = _isStreaming
 
     fun setStreamingState(isStreaming: Boolean) {
-        _isStreaming.value = isStreaming
+        _isStreaming.postValue(isStreaming)
     }
 
     fun release() {
