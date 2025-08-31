@@ -66,8 +66,16 @@ class AudioRecordWrapper3(private val context: Context) {
         // I think audio input's stopStream is called on activity destroy or smth like that
         // Also maybe smth to do with suspend
 //       withContext(Dispatchers.Main) {
-            exoPlayer?.stop()
+            // exoPlayer?.stop()
 //       }
+
+       if (Looper.myLooper() == Looper.getMainLooper()) {
+            exoPlayer?.stop()
+       } else {
+           Handler(Looper.getMainLooper()).post {
+               exoPlayer?.stop()
+           }
+       }
     }
 
     /**
@@ -87,15 +95,15 @@ class AudioRecordWrapper3(private val context: Context) {
      */
     fun release() {
         // I think this also doesn't need main thread stuff for exoPlayer
-//        if (Looper.myLooper() == Looper.getMainLooper()) {
+       if (Looper.myLooper() == Looper.getMainLooper()) {
             exoPlayer?.release()
             exoPlayer = null
-//        } else {
-//            Handler(Looper.getMainLooper()).post {
-//                exoPlayer?.release()
-//                exoPlayer = null
-//            }
-//        }
+       } else {
+           Handler(Looper.getMainLooper()).post {
+               exoPlayer?.release()
+               exoPlayer = null
+           }
+       }
         audioBuffer?.clear()
         audioBuffer = null // Explicitly delete the buffer reference
     }
