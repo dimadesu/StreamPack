@@ -30,17 +30,6 @@ class BufferVisualizerView @JvmOverloads constructor(
         holder.setFormat(PixelFormat.TRANSPARENT)
         setZOrderOnTop(true) // Ensure the SurfaceView is drawn on top
         holder.addCallback(this)
-
-        // Observe the isStreaming state in the model
-        bufferVisualizerModel?.let { model ->
-            model.isStreaming.let { isStreaming ->
-                if (isStreaming) {
-                    startDrawing()
-                } else {
-                    stopDrawing()
-                }
-            }
-        }
     }
 
     private fun drawBuffer() {
@@ -82,15 +71,29 @@ class BufferVisualizerView @JvmOverloads constructor(
 
     override fun surfaceCreated(holder: SurfaceHolder) {
 //        drawBuffer() // Draw the initial state when the surface is created
+
+        // Observe the isStreaming state in the model
+        bufferVisualizerModel?.let { model ->
+            model.isStreaming.let { isStreaming ->
+                if (isStreaming) {
+                    startDrawing()
+                } else {
+                    stopDrawing()
+                }
+            }
+        }
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
 //        android.util.Log.d("BufferVisualizerView", "Surface changed, forcing redraw")
 //        drawBuffer() // Redraw when the surface changes
+        stopDrawing()
+        startDrawing()
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         stopDrawing()
+        bufferVisualizerModel = null // Remove reference to avoid memory leaks
     }
 
     fun startDrawing() {
@@ -103,6 +106,8 @@ class BufferVisualizerView @JvmOverloads constructor(
     }
 
     fun stopDrawing() {
-        scheduler.shutdownNow() // Stop the periodic redraw immediately
+        if (!scheduler.isShutdown) {
+            scheduler.shutdownNow() // Stop the periodic redraw immediately
+        }
     }
 }
