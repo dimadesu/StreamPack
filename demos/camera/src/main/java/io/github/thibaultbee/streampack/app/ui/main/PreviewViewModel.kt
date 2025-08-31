@@ -130,8 +130,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         application,
     )
 
-    private val _audioBufferLiveData = MutableLiveData<CircularPcmBuffer>()
-    val audioBufferLiveData: LiveData<CircularPcmBuffer> = _audioBufferLiveData
     private val _audioRecordWrapperLiveData = MutableLiveData(audioRecordWrapper)
     val audioRecordWrapperLiveData: LiveData<AudioRecordWrapper3> = _audioRecordWrapperLiveData
 
