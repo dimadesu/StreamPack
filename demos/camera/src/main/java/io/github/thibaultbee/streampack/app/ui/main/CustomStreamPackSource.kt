@@ -39,8 +39,10 @@ class CustomStreamPackSourceInternal (
 
     override suspend fun stopStream() {
 //        withContext(Dispatchers.Main) {
+        Handler(Looper.getMainLooper()).post {
             exoPlayer?.stop()
 //        }
+        }
         _isStreamingFlow.value = false
     }
 
@@ -75,18 +77,18 @@ class CustomStreamPackSourceInternal (
     }
 
     override fun release() {
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            exoPlayer?.release()
-            exoPlayer = null
-            previewPlayer?.release()
-            previewPlayer = null
-        } else {
+//        if (Looper.myLooper() == Looper.getMainLooper()) {
+//            exoPlayer?.release()
+//            exoPlayer = null
+//            previewPlayer?.release()
+//            previewPlayer = null
+//        } else {
             Handler(Looper.getMainLooper()).post {
                 exoPlayer?.release()
                 exoPlayer = null
                 previewPlayer?.release()
                 previewPlayer = null
-            }
+//            }
         }
     }
 
@@ -140,9 +142,11 @@ class CustomStreamPackSourceInternal (
     }
 
     override suspend fun stopPreview() {
-        withContext(Dispatchers.Main) {
+//        withContext(Dispatchers.Main) {
+        Handler(Looper.getMainLooper()).post {
             previewPlayer?.stop()
             previewPlayer?.setVideoSurface(null)
+//        }
         }
         _isPreviewingFlow.value = false
     }

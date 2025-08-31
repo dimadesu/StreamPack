@@ -94,15 +94,15 @@ class CustomStreamPackAudioSourceInternal : IAudioSourceInternal {
     }
 
     override fun release() {
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            exoPlayer?.release()
-            exoPlayer = null
-        } else {
+//        if (Looper.myLooper() == Looper.getMainLooper()) {
+//            exoPlayer?.release()
+//            exoPlayer = null
+//        } else {
             Handler(Looper.getMainLooper()).post {
                 exoPlayer?.release()
                 exoPlayer = null
             }
-        }
+//        }
     }
 
     override fun fillAudioFrame(frame: RawFrame): RawFrame {

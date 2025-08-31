@@ -69,12 +69,8 @@ class AudioRecordWrapper3(private val context: Context) {
             // exoPlayer?.stop()
 //       }
 
-       if (Looper.myLooper() == Looper.getMainLooper()) {
-            exoPlayer?.stop()
-       } else {
-           Handler(Looper.getMainLooper()).post {
-               exoPlayer?.stop()
-           }
+       Handler(Looper.getMainLooper()).post {
+           exoPlayer?.stop()
        }
     }
 
@@ -95,14 +91,14 @@ class AudioRecordWrapper3(private val context: Context) {
      */
     fun release() {
         // I think this also doesn't need main thread stuff for exoPlayer
-       if (Looper.myLooper() == Looper.getMainLooper()) {
-            exoPlayer?.release()
-            exoPlayer = null
-       } else {
+//       if (Looper.myLooper() == Looper.getMainLooper()) {
+//            exoPlayer?.release()
+//            exoPlayer = null
+//       } else {
            Handler(Looper.getMainLooper()).post {
                exoPlayer?.release()
                exoPlayer = null
-           }
+//           }
        }
         audioBuffer?.clear()
         audioBuffer = null // Explicitly delete the buffer reference
