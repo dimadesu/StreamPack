@@ -8,7 +8,6 @@ import android.util.AttributeSet
 import android.util.Log
 import android.view.SurfaceHolder
 import android.view.SurfaceView
-import io.github.thibaultbee.streampack.app.sources.audio.AudioRecordWrapper3
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
@@ -23,18 +22,7 @@ class BufferVisualizerView @JvmOverloads constructor(
         style = Paint.Style.FILL
     }
 
-    var audioRecordWrapper: AudioRecordWrapper3? = null
-        set(value) {
-            field = value
-//            android.util.Log.d("BufferVisualizerView", "audioRecordWrapper updated")
-//            drawBuffer() // Trigger a redraw when the wrapper updates
-        }
-
     var bufferVisualizerModel: BufferVisualizerModel? = null
-        set(value) {
-            field = value
-            audioRecordWrapper = value?.getCircularPcmBuffer()?.let { AudioRecordWrapper3(context) }
-        }
 
     private var scheduler = Executors.newSingleThreadScheduledExecutor()
 
@@ -55,29 +43,25 @@ class BufferVisualizerView @JvmOverloads constructor(
             // Clear the canvas at the start
             canvas.drawColor(Color.BLACK)
 
-            audioRecordWrapper?.let { wrapper ->
-                val buffer = wrapper.audioBuffer
-
-                if (buffer != null) {
-                    val bufferSize = buffer.capacity
-                    val availableData = buffer.availableData
+            bufferVisualizerModel?.circularPcmBuffer?.let { buffer ->
+                val bufferSize = buffer.capacity
+                val availableData = buffer.availableData
 //                android.util.Log.d("BufferVisualizerView", "Available data: $availableData, Buffer size: $bufferSize")
 
-                    if (bufferSize > 0) {
-                        // Calculate the fill percentage
-                        val fillPercentage = availableData.toFloat() / bufferSize
+                if (bufferSize > 0) {
+                    // Calculate the fill percentage
+                    val fillPercentage = availableData.toFloat() / bufferSize
 //                    android.util.Log.d("BufferVisualizerView", "Fill percentage: $fillPercentage")
 
-                        // Calculate the bar width based on the fill percentage
-                        val barWidth = (fillPercentage * width).coerceAtLeast(5f) // Minimum width of 5 pixels
-                        val left = 0f
-                        val right = barWidth
+                    // Calculate the bar width based on the fill percentage
+                    val barWidth = (fillPercentage * width).coerceAtLeast(5f) // Minimum width of 5 pixels
+                    val left = 0f
+                    val right = barWidth
 
-                        // Draw a single bar representing the fill percentage
-                        canvas.drawRect(left, 0f, right, height.toFloat(), paint)
-                    }
-
+                    // Draw a single bar representing the fill percentage
+                    canvas.drawRect(left, 0f, right, height.toFloat(), paint)
                 }
+
             }
         } finally {
 //            android.util.Log.d("BufferVisualizerView", "Canvas unlocked and posted")

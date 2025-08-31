@@ -44,11 +44,13 @@ class CustomAudioInput3(
         val exoPlayerInstance = ExoPlayer.Builder(ctx, renderersFactory).build()
         audioRecordWrapper = AudioRecordWrapper3(ctx)
         audioRecordWrapper?.config(exoPlayerInstance, pcmBuffer)
+        bufferVisualizerModel.circularPcmBuffer = pcmBuffer
 
     }
 
     override suspend fun startStream() {
         audioRecordWrapper?.startRecording()
+        // TODO
         _isStreamingFlow.tryEmit(true)
     }
 

@@ -123,24 +123,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     private val _isTryingConnectionLiveData = MutableLiveData<Boolean>()
     val isTryingConnectionLiveData: LiveData<Boolean> = _isTryingConnectionLiveData
 
-    private val bufferVisualizerModel: BufferVisualizerModel = BufferVisualizerModel
-
-    private val audioRecordWrapper: AudioRecordWrapper3 = AudioRecordWrapper3(
-        application,
-    )
-
-    private val _audioRecordWrapperLiveData = MutableLiveData(audioRecordWrapper)
-    val audioRecordWrapperLiveData: LiveData<AudioRecordWrapper3> = _audioRecordWrapperLiveData
-
-    init {
-        viewModelScope.launch {
-            // Wait for audioRecordWrapper to be initialized
-            while (audioRecordWrapper.audioBuffer == null) {
-                kotlinx.coroutines.delay(100) // Poll every 100ms
-            }
-            _audioRecordWrapperLiveData.postValue(audioRecordWrapper)
-        }
-    }
+    val bufferVisualizerModel: BufferVisualizerModel = BufferVisualizerModel
 
     init {
         viewModelScope.launch {
@@ -551,10 +534,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         showLensDistanceSlider.postValue(false)
         lensDistanceRange.postValue(settings.focus.availableLensDistanceRange)
         lensDistance = 0f
-    }
-
-    fun getBufferVisualizerModel(): BufferVisualizerModel {
-        return bufferVisualizerModel
     }
 
     override fun onCleared() {

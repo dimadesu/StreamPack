@@ -108,6 +108,7 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
         binding = MainFragmentBinding.inflate(inflater, container, false)
         binding.lifecycleOwner = this
         binding.viewmodel = previewViewModel
+        binding.bufferVisualizer.bufferVisualizerModel = previewViewModel.bufferVisualizerModel
 
         bindProperties()
         return binding.root
