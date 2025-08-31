@@ -28,7 +28,7 @@ class BufferVisualizerView @JvmOverloads constructor(
             drawBuffer() // Trigger a redraw when the wrapper updates
         }
 
-    private val scheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor()
+    private var scheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor()
 
     init {
         holder.setFormat(android.graphics.PixelFormat.TRANSPARENT)
@@ -91,6 +91,9 @@ class BufferVisualizerView @JvmOverloads constructor(
     }
 
     fun startDrawing() {
+        if (scheduler.isShutdown) {
+            scheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor()
+        }
         scheduler.scheduleAtFixedRate({
             drawBuffer() // Trigger the redraw
         }, 0, 200, java.util.concurrent.TimeUnit.MILLISECONDS)
