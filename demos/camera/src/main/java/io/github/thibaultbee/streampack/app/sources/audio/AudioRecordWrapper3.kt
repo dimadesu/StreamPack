@@ -54,17 +54,34 @@ class AudioRecordWrapper3(
        Handler(Looper.getMainLooper()).post {
            exoPlayer.stop()
        }
+       audioBuffer.clear()
     }
 
     /**
      * Reads audio data into the provided buffer.
      */
     fun read(buffer: ByteBuffer, size: Int): Int {
-        val audioBuffer = this.audioBuffer ?: throw IllegalStateException("audioBuffer is not initialized. Call config() first.")
-        // Read data from CircularPcmBuffer into the ByteBuffer
-        val bytesRead = audioBuffer.read(buffer, size)
+        val bytesRead = audioBuffer.read(buffer, size, CircularPcmBuffer.READ_NON_BLOCKING)
 
-        // Return the number of bytes read
+        // Handle error codes
+        if (bytesRead < 0) {
+            when (bytesRead) {
+                CircularPcmBuffer.ERROR_INVALID_OPERATION -> {
+                    android.util.Log.e(TAG, "Audio buffer is not properly initialized.")
+                }
+                CircularPcmBuffer.ERROR_BAD_VALUE -> {
+                    android.util.Log.e(TAG, "Invalid parameters passed to audio buffer read.")
+                }
+                CircularPcmBuffer.ERROR_DEAD_OBJECT -> {
+                    android.util.Log.e(TAG, "Audio buffer is no longer valid.")
+                }
+                else -> {
+                    android.util.Log.e(TAG, "Unknown error occurred while reading audio buffer.")
+                }
+            }
+            return 0 // Return 0 bytes read in case of an error
+        }
+
         return bytesRead
     }
 
@@ -77,10 +94,9 @@ class AudioRecordWrapper3(
 //            exoPlayer.release()
 //            exoPlayer = null
 //       } else {
-           Handler(Looper.getMainLooper()).post {
-               exoPlayer.release()
-//           }
-       }
+        Handler(Looper.getMainLooper()).post {
+           exoPlayer.release()
+        }
         audioBuffer.clear()
     }
 }

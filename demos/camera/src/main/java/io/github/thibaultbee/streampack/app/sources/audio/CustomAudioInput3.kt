@@ -18,8 +18,7 @@ class CustomAudioInput3(
     private val bufferVisualizerModel: BufferVisualizerModel
 ) : IAudioSourceInternal {
 
-    // TODO
-    private var bufferSize: Int? = null
+    var bufferSize: Int? = null
 
     private val _isStreamingFlow = MutableStateFlow(false)
     override val isStreamingFlow = _isStreamingFlow.asStateFlow()
@@ -30,6 +29,11 @@ class CustomAudioInput3(
 
     override suspend fun configure(config: AudioSourceConfig) {
 //        audioRecordWrapper.release()
+        bufferSize = AudioRecord.getMinBufferSize(
+            config.sampleRate,
+            config.channelConfig,
+            config.byteFormat
+        )
     }
 
     override suspend fun startStream() {
@@ -54,26 +58,25 @@ class CustomAudioInput3(
         val length = audioRecordWrapper.read(buffer.rawBuffer, buffer.rawBuffer.remaining()) ?: 0
         if (length > 0) {
             buffer.timestampInUs = System.nanoTime() / 1000
+            buffer.rawBuffer
             return buffer
         } else {
-            // TODO to match what fillAudioFrame does
-            android.util.Log.w(TAG, "Failed to read audio data, filling buffer with blanks.")
-            while (buffer.rawBuffer.hasRemaining()) {
-                buffer.rawBuffer.put(0) // Fill with blanks (zeros)
-            }
-            buffer.timestampInUs = System.nanoTime() / 1000
-            return buffer
+            buffer.close()
+            throw IllegalStateException("Failed to read audio data")
         }
     }
 
     override fun fillAudioFrame(frame: RawFrame): RawFrame {
-        val audioRecordWrapper = requireNotNull(audioRecordWrapper) { "Audio source is not initialized" }
         val buffer = frame.rawBuffer
         val length = audioRecordWrapper.read(buffer, buffer.remaining())
-//        android.util.Log.d(TAG, "fillAudioFrame called with buffer size: ${buffer.remaining()} and length: $length")
-        frame.timestampInUs = System.nanoTime() / 1000
-        buffer.flip()
-        return frame
+        if (length > 0) {
+            frame.timestampInUs = System.nanoTime() / 1000
+            buffer
+            return frame
+        } else {
+            frame.close()
+            throw IllegalStateException("Failed to read audio data")
+        }
     }
 
     class Factory(
