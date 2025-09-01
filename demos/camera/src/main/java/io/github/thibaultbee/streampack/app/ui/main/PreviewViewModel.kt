@@ -137,77 +137,77 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 // Set audio source and video source
                 if (streamer.withAudio) {
                     Log.i(TAG, "Audio source is enabled. Setting audio source")
-//                    streamer.setAudioSource(MicrophoneSourceFactory())
+                    streamer.setAudioSource(MicrophoneSourceFactory())
 
 
 
 
 // TODO
-                    storageRepository.audioConfigFlow
-                        .collect { config ->
-                            if (ActivityCompat.checkSelfPermission(
-                                    application,
-                                    Manifest.permission.RECORD_AUDIO
-                                ) == PackageManager.PERMISSION_GRANTED
-                            ) {
-                                config?.let {
-                                    // All heavy lifting and blocking calls should be here
-//                                    withContext(Dispatchers.Main) {
-                                    val bufferSize = AudioRecord.getMinBufferSize(
-                                        it.sampleRate,
-                                        it.channelConfig,
-                                        it.byteFormat
-                                    )
-                                    val pcmBuffer = CircularPcmBuffer(bufferSize * 4)
-
-
-
-//                                    val loadControl = DefaultLoadControl.Builder()
-//                                        .setBufferDurationsMs(
-//                                            100,  // minBufferMs
-//                                            1000, // maxBufferMs
-//                                            100,  // bufferForPlaybackMs
-//                                            50    // bufferForPlaybackAfterRebufferMs
+//                    storageRepository.audioConfigFlow
+//                        .collect { config ->
+//                            if (ActivityCompat.checkSelfPermission(
+//                                    application,
+//                                    Manifest.permission.RECORD_AUDIO
+//                                ) == PackageManager.PERMISSION_GRANTED
+//                            ) {
+//                                config?.let {
+//                                    // All heavy lifting and blocking calls should be here
+////                                    withContext(Dispatchers.Main) {
+//                                    val bufferSize = AudioRecord.getMinBufferSize(
+//                                        it.sampleRate,
+//                                        it.channelConfig,
+//                                        it.byteFormat
+//                                    )
+//                                    val pcmBuffer = CircularPcmBuffer(bufferSize * 4)
+//
+//
+//
+////                                    val loadControl = DefaultLoadControl.Builder()
+////                                        .setBufferDurationsMs(
+////                                            100,  // minBufferMs
+////                                            1000, // maxBufferMs
+////                                            100,  // bufferForPlaybackMs
+////                                            50    // bufferForPlaybackAfterRebufferMs
+////                                        )
+////                                        .setPrioritizeTimeOverSizeThresholds(true)
+////                                        .setTargetBufferBytes(DefaultLoadControl.DEFAULT_TARGET_BUFFER_BYTES)
+////                                        .build()
+//
+//                                    // All player setup must be done on the same thread
+//                                    val renderersFactory = CustomAudioRenderersFactory(application, pcmBuffer)
+//                                    // TODO add video renderer
+//                                    val exoPlayerInstance = ExoPlayer
+//                                        .Builder(
+//                                        application,
+//                                            renderersFactory
 //                                        )
-//                                        .setPrioritizeTimeOverSizeThresholds(true)
-//                                        .setTargetBufferBytes(DefaultLoadControl.DEFAULT_TARGET_BUFFER_BYTES)
+////                                        .setLoadControl(loadControl)
 //                                        .build()
-
-                                    // All player setup must be done on the same thread
-                                    val renderersFactory = CustomAudioRenderersFactory(application, pcmBuffer)
-                                    // TODO add video renderer
-                                    val exoPlayerInstance = ExoPlayer
-                                        .Builder(
-                                        application,
-                                            renderersFactory
-                                        )
-//                                        .setLoadControl(loadControl)
-                                        .build()
-
-                                    // Set the media source. This can be done on the background thread as ExoPlayer is thread-agnostic for this call
-                                    val mediaItem = MediaItem.fromUri("rtmp://localhost:1935/publish/live")
-                                    val mediaSource = ProgressiveMediaSource.Factory(
-                                        DefaultDataSource.Factory(application)
-                                    ).createMediaSource(mediaItem)
-                                    exoPlayerInstance.setMediaSource(mediaSource)
-
-                                    val audioRecordWrapper = AudioRecordWrapper3(exoPlayerInstance, pcmBuffer)
-                                    BufferVisualizerModel.circularPcmBuffer = pcmBuffer
-                                    bufferVisualizerModel = BufferVisualizerModel
-//                                    bufferVisualizer.startObserving()
-
-                                    // Now, safely pass the player and wrapper back to the main thread if needed
-//                                        withContext(Dispatchers.Main) {
-//                                    streamer.setVideoSource(CustomStreamPackSourceInternal.Factory(exoPlayerInstance))
-                                    streamer.setAudioSource(CustomAudioInput3.Factory(
-                                        audioRecordWrapper,
-                                        bufferVisualizerModel as BufferVisualizerModel
-                                    ))
-//                                        }
-//                                    }
-                                } ?: Log.i(TAG, "Audio is disabled")
-                            }
-                        }
+//
+//                                    // Set the media source. This can be done on the background thread as ExoPlayer is thread-agnostic for this call
+//                                    val mediaItem = MediaItem.fromUri("rtmp://localhost:1935/publish/live")
+//                                    val mediaSource = ProgressiveMediaSource.Factory(
+//                                        DefaultDataSource.Factory(application)
+//                                    ).createMediaSource(mediaItem)
+//                                    exoPlayerInstance.setMediaSource(mediaSource)
+//
+//                                    val audioRecordWrapper = AudioRecordWrapper3(exoPlayerInstance, pcmBuffer)
+//                                    BufferVisualizerModel.circularPcmBuffer = pcmBuffer
+//                                    bufferVisualizerModel = BufferVisualizerModel
+////                                    bufferVisualizer.startObserving()
+//
+//                                    // Now, safely pass the player and wrapper back to the main thread if needed
+////                                        withContext(Dispatchers.Main) {
+////                                    streamer.setVideoSource(CustomStreamPackSourceInternal.Factory(exoPlayerInstance))
+//                                    streamer.setAudioSource(CustomAudioInput3.Factory(
+//                                        audioRecordWrapper,
+//                                        bufferVisualizerModel as BufferVisualizerModel
+//                                    ))
+////                                        }
+////                                    }
+//                                } ?: Log.i(TAG, "Audio is disabled")
+//                            }
+//                        }
 
 
 
