@@ -57,7 +57,7 @@ class CustomStreamPackAudioSourceInternal : IAudioSourceInternal {
         }
         // Delay to allow ExoPlayer to start and buffer to fill
         kotlinx.coroutines.delay(1000)
-        android.util.Log.d("CustomAudioSource", "Buffer state after startup delay: available=${audioBuffer.available()}")
+        android.util.Log.d("CustomAudioSource", "Buffer state after startup delay: available=${audioBuffer.available}")
         _isStreamingFlow.value = true
     }
 
@@ -112,7 +112,7 @@ class CustomStreamPackAudioSourceInternal : IAudioSourceInternal {
         android.util.Log.i("CustomAudioSource", "fillAudioFrame called: frame capacity=${frame.rawBuffer.capacity()} remaining=${frame.rawBuffer.remaining()}")
         val bytesPerSample = 2 * 2 // 2 bytes per sample, 2 channels
         synchronized(audioBuffer) {
-            val available = audioBuffer.available()
+            val available = audioBuffer.available
             val frameCapacity = frame.rawBuffer.remaining()
             android.util.Log.i("CustomAudioSource", "fillAudioFrame: available=$available frameCapacity=$frameCapacity")
             android.util.Log.d("CustomAudioSource", "audioBuffer identity (read): ${System.identityHashCode(audioBuffer)} available before read: $available")
@@ -125,7 +125,7 @@ class CustomStreamPackAudioSourceInternal : IAudioSourceInternal {
                 frame.rawBuffer.position(frame.rawBuffer.position() + bytesRead)
                 frame.rawBuffer.flip()
                 android.util.Log.i("CustomAudioSource", "fillAudioFrame: copied $bytesRead bytes (sample-aligned)")
-                android.util.Log.d("CustomAudioSource", "audioBuffer available after read: ${audioBuffer.available()}")
+                android.util.Log.d("CustomAudioSource", "audioBuffer available after read: ${audioBuffer.available}")
             } else {
                 if (available > 0 || frameCapacity > 0) {
                     android.util.Log.w("CustomAudioSource", "fillAudioFrame: WARNING - not enough data for a full sample-aligned frame (available=$available, frameCapacity=$frameCapacity, bytesPerSample=$bytesPerSample)")
@@ -139,7 +139,7 @@ class CustomStreamPackAudioSourceInternal : IAudioSourceInternal {
         android.util.Log.i("CustomAudioSource", "getAudioFrame called: buffer capacity=${audioBuffer.capacity}")
         val bytesPerSample = 2 * 2 // 2 bytes per sample, 2 channels
         val frameSize = 3840 // Match encoder expectation
-        val available = audioBuffer.available()
+        val available = audioBuffer.available
         if (available < frameSize) {
             android.util.Log.e("CustomAudioSource", "ERROR: Not enough data for a full frame: available=$available, required=$frameSize. PCM data may not be flowing from renderer. Check ExoPlayer renderer and PCM source.")
             throw IllegalStateException("Not enough audio data for a full frame")

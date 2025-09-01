@@ -47,7 +47,7 @@ class BufferVisualizerView @JvmOverloads constructor(
 
             previewViewModel?.bufferVisualizerModel?.circularPcmBuffer?.let { buffer ->
                 val bufferSize = buffer.capacity
-                val availableData = buffer.availableData
+                val availableData = buffer.available
 //                android.util.Log.d("BufferVisualizerView", "Available data: $availableData, Buffer size: $bufferSize")
 
                 if (bufferSize > 0) {
