@@ -18,10 +18,4 @@ object BufferVisualizerModel {
     fun setStreamingState(isStreaming: Boolean) {
         _isStreaming.postValue(isStreaming)
     }
-
-    fun release() {
-        setStreamingState(false)
-        circularPcmBuffer = null
-        Log.i(TAG, "All resources released.")
-    }
 }

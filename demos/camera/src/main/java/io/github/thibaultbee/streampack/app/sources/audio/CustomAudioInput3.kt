@@ -14,11 +14,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 class CustomAudioInput3(
-    private val context: Context,
+    private var audioRecordWrapper: AudioRecordWrapper3,
     private val bufferVisualizerModel: BufferVisualizerModel
 ) : IAudioSourceInternal {
-    var audioRecordWrapper: AudioRecordWrapper3? = null
-        private set
+
+    // TODO
     private var bufferSize: Int? = null
 
     private val _isStreamingFlow = MutableStateFlow(false)
@@ -29,47 +29,29 @@ class CustomAudioInput3(
     }
 
     override suspend fun configure(config: AudioSourceConfig) {
-        audioRecordWrapper?.release()
-        bufferSize = AudioRecord.getMinBufferSize(
-            config.sampleRate,
-            config.channelConfig,
-            config.byteFormat
-        )
-        val ctx = requireNotNull(context) { "Context must be set before configure" }
-
-        val safeBufferSize = bufferSize ?: return
-
-        val pcmBuffer = CircularPcmBuffer(safeBufferSize * 64)
-        val renderersFactory = CustomAudioRenderersFactory(ctx, pcmBuffer)
-        val exoPlayerInstance = ExoPlayer.Builder(ctx, renderersFactory).build()
-        audioRecordWrapper = AudioRecordWrapper3(ctx)
-        audioRecordWrapper?.config(exoPlayerInstance, pcmBuffer)
-        bufferVisualizerModel.circularPcmBuffer = pcmBuffer
-
+        audioRecordWrapper.release()
     }
 
     override suspend fun startStream() {
-        audioRecordWrapper?.startRecording()
+        audioRecordWrapper.startRecording()
         bufferVisualizerModel.setStreamingState(true)
         _isStreamingFlow.tryEmit(true)
     }
 
     override suspend fun stopStream() {
         bufferVisualizerModel.setStreamingState(false)
-        audioRecordWrapper?.stop()
+        audioRecordWrapper.stop()
         _isStreamingFlow.tryEmit(false)
     }
 
     override fun release() {
-        bufferVisualizerModel.release()
-        audioRecordWrapper?.release()
-        audioRecordWrapper = null
+        audioRecordWrapper.release()
         _isStreamingFlow.tryEmit(false)
     }
 
     override fun getAudioFrame(frameFactory: IReadOnlyRawFrameFactory): RawFrame {
         val buffer = frameFactory.create(bufferSize!!, 0)
-        val length = audioRecordWrapper?.read(buffer.rawBuffer, buffer.rawBuffer.remaining()) ?: 0
+        val length = audioRecordWrapper.read(buffer.rawBuffer, buffer.rawBuffer.remaining()) ?: 0
         if (length > 0) {
             buffer.timestampInUs = System.nanoTime() / 1000
             return buffer
@@ -94,9 +76,12 @@ class CustomAudioInput3(
         return frame
     }
 
-    class Factory(private val bufferVisualizerModel: BufferVisualizerModel) : IAudioSourceInternal.Factory {
+    class Factory(
+        private var audioRecordWrapper: AudioRecordWrapper3,
+        private val bufferVisualizerModel: BufferVisualizerModel
+    ) : IAudioSourceInternal.Factory {
         override suspend fun create(context: Context): IAudioSourceInternal {
-            val customAudioInput = CustomAudioInput3(context, bufferVisualizerModel)
+            val customAudioInput = CustomAudioInput3(audioRecordWrapper, bufferVisualizerModel)
             return customAudioInput
         }
 

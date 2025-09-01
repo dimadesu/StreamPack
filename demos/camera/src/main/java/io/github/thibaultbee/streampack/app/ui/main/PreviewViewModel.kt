@@ -21,6 +21,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.hardware.camera2.CaptureResult
+import android.media.AudioRecord
 import android.util.Log
 import android.util.Range
 import android.util.Rational
@@ -31,6 +32,10 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.asLiveData
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.MediaItem
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import io.github.thibaultbee.streampack.app.BR
 import io.github.thibaultbee.streampack.app.R
 import io.github.thibaultbee.streampack.app.data.rotation.RotationRepository
@@ -60,6 +65,7 @@ import io.github.thibaultbee.streampack.core.interfaces.startStream
 import io.github.thibaultbee.streampack.core.streamers.single.SingleStreamer
 import io.github.thibaultbee.streampack.core.utils.extensions.isClosedException
 import io.github.thibaultbee.streampack.ext.srt.regulator.controllers.DefaultSrtBitrateRegulatorController
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
@@ -68,6 +74,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class PreviewViewModel(private val application: Application) : ObservableViewModel() {
     private val storageRepository = DataStoreRepository(application, application.dataStore)
@@ -125,7 +132,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     private val _isTryingConnectionLiveData = MutableLiveData<Boolean>()
     val isTryingConnectionLiveData: LiveData<Boolean> = _isTryingConnectionLiveData
 
-    val bufferVisualizerModel: BufferVisualizerModel = BufferVisualizerModel
+    var bufferVisualizerModel: BufferVisualizerModel? = null
 
     init {
         viewModelScope.launch {
@@ -205,6 +212,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         ) == PackageManager.PERMISSION_GRANTED
                     ) {
                         config?.let {
+                            //
                             streamer.setAudioConfig(it)
                         } ?: Log.i(TAG, "Audio is disabled")
                     }
@@ -333,18 +341,62 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         viewModelScope.launch {
             val nextSource = when (videoSource) {
                 is ICameraSource -> {
-                    streamer.setVideoSource(CustomStreamPackSourceInternal.Factory())
-                    streamer.setAudioSource(CustomAudioInput3.Factory(bufferVisualizerModel))
+
+
+                    storageRepository.audioConfigFlow
+                        .collect { config ->
+                            if (ActivityCompat.checkSelfPermission(
+                                    application,
+                                    Manifest.permission.RECORD_AUDIO
+                                ) == PackageManager.PERMISSION_GRANTED
+                            ) {
+                                config?.let {
+
+                                    val bufferSize = AudioRecord.getMinBufferSize(
+                                        it.sampleRate,
+                                        it.channelConfig,
+                                        it.byteFormat
+                                    )
+                                    val pcmBuffer = CircularPcmBuffer(bufferSize * 64)
+
+                                    val renderersFactory = CustomAudioRenderersFactory(application, pcmBuffer)
+                                    // TODO add video renderer
+                                    val exoPlayerInstance = ExoPlayer.Builder(application, renderersFactory).build()
+
+
+                                    // TODO Do I need this main thread thing?
+                                    withContext(Dispatchers.Main) {
+                                        val mediaItem = MediaItem.fromUri("rtmp://localhost:1935/publish/live")
+                                        val mediaSource = ProgressiveMediaSource.Factory(
+                                            DefaultDataSource.Factory(application)
+                                        ).createMediaSource(mediaItem)
+                                        exoPlayerInstance.setMediaSource(mediaSource)
+                                    }
+
+                                    val audioRecordWrapper = AudioRecordWrapper3(exoPlayerInstance, pcmBuffer)
+
+                                    BufferVisualizerModel.circularPcmBuffer = pcmBuffer
+                                    bufferVisualizerModel = BufferVisualizerModel
+
+                                    streamer.setVideoSource(CustomStreamPackSourceInternal.Factory())
+                                    streamer.setAudioSource(CustomAudioInput3.Factory(
+                                        audioRecordWrapper,
+                                        bufferVisualizerModel as BufferVisualizerModel
+                                    ))
+                                } ?: Log.i(TAG, "Audio is disabled")
+                            }
+                        }
                 }
 //                is IBitmapSource -> {
 //                    CameraSourceFactory()
 //                }
-                is CustomStreamPackSourceInternal -> {
-                    streamer.setVideoSource(CameraSourceFactory())
-                    streamer.setAudioSource(MicrophoneSourceFactory())
-                }
+//                is CustomStreamPackSourceInternal -> {
+//                    streamer.setVideoSource(CameraSourceFactory())
+//                    streamer.setAudioSource(MicrophoneSourceFactory())
+//                }
                 else -> {
-                    Log.i(TAG, "Unknown video source. Fallback to camera sources")
+//                    Log.i(TAG, "Unknown video source. Fallback to camera sources")
+                    bufferVisualizerModel = null
                     streamer.setVideoSource(CameraSourceFactory())
                     streamer.setAudioSource(MicrophoneSourceFactory())
                 }

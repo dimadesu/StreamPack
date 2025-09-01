@@ -12,48 +12,23 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.nio.ByteBuffer
 
-class AudioRecordWrapper3(private val context: Context) {
-    private var exoPlayer: ExoPlayer? = null
-
+class AudioRecordWrapper3(
+    private val exoPlayer: ExoPlayer,
+    private val audioBuffer: CircularPcmBuffer,
+) {
     companion object {
         private const val TAG = "AudioRecordWrapper3"
-    }
-
-    /**
-     * The audio buffer used for PCM data.
-     */
-    public var audioBuffer: CircularPcmBuffer? = null
-        private set
-
-    /**
-     * Configures the AudioRecordWrapper with the given ExoPlayer and audio buffer.
-     *
-     * @param exoPlayer The ExoPlayer instance to be used for playback.
-     * @param audioBuffer The CircularPcmBuffer instance used for audio buffering.
-     */
-    suspend fun config(exoPlayer: ExoPlayer, audioBuffer: CircularPcmBuffer) {
-        this.exoPlayer = exoPlayer
-        this.audioBuffer = audioBuffer
-        withContext(Dispatchers.Main) {
-            val mediaItem = MediaItem.fromUri("rtmp://localhost:1935/publish/live")
-            val mediaSource = ProgressiveMediaSource.Factory(
-                DefaultDataSource.Factory(context)
-            ).createMediaSource(mediaItem)
-            exoPlayer.setMediaSource(mediaSource)
-//            exoPlayer?.prepare()
-//            exoPlayer?.playWhenReady = true
-        }
     }
 
     /**
      * Starts recording audio. Add custom behavior here if needed.
      */
     suspend fun startRecording() {
-        audioBuffer?.clear()
+        audioBuffer.clear()
         android.util.Log.i(TAG, "Audio buffer cleared before streaming start.")
         withContext(Dispatchers.Main) {
-            exoPlayer?.prepare()
-            exoPlayer?.playWhenReady = true
+            exoPlayer.prepare()
+            exoPlayer.playWhenReady = true
         }
     }
 
@@ -66,11 +41,11 @@ class AudioRecordWrapper3(private val context: Context) {
         // I think audio input's stopStream is called on activity destroy or smth like that
         // Also maybe smth to do with suspend
 //       withContext(Dispatchers.Main) {
-            // exoPlayer?.stop()
+            // exoPlayer.stop()
 //       }
 
        Handler(Looper.getMainLooper()).post {
-           exoPlayer?.stop()
+           exoPlayer.stop()
        }
     }
 
@@ -92,15 +67,13 @@ class AudioRecordWrapper3(private val context: Context) {
     fun release() {
         // I think this also doesn't need main thread stuff for exoPlayer
 //       if (Looper.myLooper() == Looper.getMainLooper()) {
-//            exoPlayer?.release()
+//            exoPlayer.release()
 //            exoPlayer = null
 //       } else {
            Handler(Looper.getMainLooper()).post {
-               exoPlayer?.release()
-               exoPlayer = null
+               exoPlayer.release()
 //           }
        }
-        audioBuffer?.clear()
-        audioBuffer = null // Explicitly delete the buffer reference
+        audioBuffer.clear()
     }
 }
