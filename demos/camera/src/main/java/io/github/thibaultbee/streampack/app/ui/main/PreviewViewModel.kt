@@ -352,7 +352,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                                             it.channelConfig,
                                             it.byteFormat
                                         )
-                                        val pcmBuffer = CircularPcmBuffer(bufferSize * 64)
+                                        val pcmBuffer = CircularPcmBuffer(bufferSize * 4)
 
                                         // All player setup must be done on the same thread
                                         val renderersFactory = CustomAudioRenderersFactory(application, pcmBuffer)
