@@ -431,16 +431,16 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                                             it.channelConfig,
                                             it.byteFormat
                                         )
-                                        val pcmBuffer = CircularPcmBuffer(bufferSize * 4)
+                                        val pcmBuffer = CircularPcmBuffer(bufferSize * 64)
 
                                         val loadControl = DefaultLoadControl.Builder()
-                                            .setTargetBufferBytes(bufferSize)
-                                            .setBufferDurationsMs(
-                                                3000,  // Minimum buffer before starting playback (e.g., 15000)
-                                                5000,  // Maximum buffer size (e.g., 50000)
-                                                2500,  // Buffer before starting playback after a seek (e.g., 2500)
-                                                5000 // Buffer after rebuffer (e.g., 5000)
-                                            )
+//                                            .setTargetBufferBytes(bufferSize)
+//                                            .setBufferDurationsMs(
+//                                                3000,  // Minimum buffer before starting playback (e.g., 15000)
+//                                                5000,  // Maximum buffer size (e.g., 50000)
+//                                                2500,  // Buffer before starting playback after a seek (e.g., 2500)
+//                                                5000 // Buffer after rebuffer (e.g., 5000)
+//                                            )
                                             .build()
 
                                         // All player setup must be done on the same thread
