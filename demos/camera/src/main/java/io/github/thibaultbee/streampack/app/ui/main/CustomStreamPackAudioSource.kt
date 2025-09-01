@@ -51,7 +51,8 @@ class CustomStreamPackAudioSourceInternal : IAudioSourceInternal {
         android.util.Log.i("CustomAudioSource", "Audio stream start: sampleRate=$audioSampleRate, totalSamplesSent=$totalSamplesSent, streamStartTimeUs=$streamStartTimeUs")
         audioBuffer.clear()
         android.util.Log.i("CustomAudioSource", "Audio buffer cleared before streaming start.")
-        withContext(Dispatchers.Main) {
+        Handler(Looper.getMainLooper()).post {
+//        withContext(Dispatchers.Main) {
             exoPlayer?.playWhenReady = true
         }
         // Delay to allow ExoPlayer to start and buffer to fill
@@ -61,8 +62,9 @@ class CustomStreamPackAudioSourceInternal : IAudioSourceInternal {
     }
 
     override suspend fun stopStream() {
-        withContext(Dispatchers.Main) {
-            exoPlayer?.playWhenReady = false
+        Handler(Looper.getMainLooper()).post {
+//        withContext(Dispatchers.Main) {
+            exoPlayer?.stop()
         }
         _isStreamingFlow.value = false
     }
@@ -83,7 +85,8 @@ class CustomStreamPackAudioSourceInternal : IAudioSourceInternal {
             }
         ).createMediaSource(mediaItem)
         val exoPlayerInstance = ExoPlayer.Builder(ctx, renderersFactory).build()
-        withContext(Dispatchers.Main) {
+        Handler(Looper.getMainLooper()).post {
+//        withContext(Dispatchers.Main) {
             exoPlayerInstance.setMediaSource(mediaSource)
             exoPlayerInstance.prepare()
             exoPlayerInstance.playWhenReady = true

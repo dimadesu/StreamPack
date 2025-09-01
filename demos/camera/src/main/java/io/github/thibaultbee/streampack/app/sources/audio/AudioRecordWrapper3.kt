@@ -23,13 +23,20 @@ class AudioRecordWrapper3(
     /**
      * Starts recording audio. Add custom behavior here if needed.
      */
-    suspend fun startRecording() {
+    fun startRecording() {
         audioBuffer.clear()
         android.util.Log.i(TAG, "Audio buffer cleared before streaming start.")
-        withContext(Dispatchers.Main) {
-            exoPlayer.prepare()
-            exoPlayer.playWhenReady = true
-        }
+
+
+//       if (Looper.myLooper() == Looper.getMainLooper()) {
+//           exoPlayer.prepare()
+//           exoPlayer.playWhenReady = true
+//       } else {
+           Handler(Looper.getMainLooper()).post {
+               exoPlayer.prepare()
+               exoPlayer.playWhenReady = true
+           }
+//       }
     }
 
     /**

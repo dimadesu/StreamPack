@@ -30,7 +30,7 @@ class CustomStreamPackSourceInternal (
     private var previewPlayer: ExoPlayer? = null // For preview
 
     override suspend fun startStream() {
-        withContext(Dispatchers.Main) {
+        Handler(Looper.getMainLooper()).post {
             exoPlayer.prepare()
             exoPlayer.playWhenReady = true
         }
@@ -88,7 +88,8 @@ class CustomStreamPackSourceInternal (
 
     override suspend fun setOutput(surface: android.view.Surface) {
         outputSurface = surface
-        withContext(Dispatchers.Main) {
+        Handler(Looper.getMainLooper()).post {
+//        withContext(Dispatchers.Main) {
             exoPlayer.setVideoSurface(surface)
         }
     }
@@ -99,14 +100,16 @@ class CustomStreamPackSourceInternal (
 
     override suspend fun setPreview(surface: android.view.Surface) {
         previewSurface = surface
-        withContext(Dispatchers.Main) {
+        Handler(Looper.getMainLooper()).post {
+//        withContext(Dispatchers.Main) {
             previewPlayer?.setVideoSurface(surface)
         }
     }
 
     override suspend fun startPreview() {
         previewSurface?.let { surface ->
-            withContext(Dispatchers.Main) {
+            Handler(Looper.getMainLooper()).post {
+//            withContext(Dispatchers.Main) {
                 previewPlayer?.setVideoSurface(surface)
             }
             _isPreviewingFlow.value = true

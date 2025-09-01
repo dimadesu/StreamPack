@@ -29,7 +29,7 @@ class CustomAudioInput3(
     }
 
     override suspend fun configure(config: AudioSourceConfig) {
-        audioRecordWrapper.release()
+//        audioRecordWrapper.release()
     }
 
     override suspend fun startStream() {

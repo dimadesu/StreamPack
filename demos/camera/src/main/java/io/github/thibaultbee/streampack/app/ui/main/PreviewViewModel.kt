@@ -22,6 +22,8 @@ import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.hardware.camera2.CaptureResult
 import android.media.AudioRecord
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.util.Range
 import android.util.Rational
@@ -342,7 +344,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             val nextSource = when (videoSource) {
                 is ICameraSource -> {
 
-
                     storageRepository.audioConfigFlow
                         .collect { config ->
                             if (ActivityCompat.checkSelfPermission(
@@ -351,41 +352,90 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                                 ) == PackageManager.PERMISSION_GRANTED
                             ) {
                                 config?.let {
+                                    // All heavy lifting and blocking calls should be here
+//                                    withContext(Dispatchers.Main) {
+                                        val bufferSize = AudioRecord.getMinBufferSize(
+                                            it.sampleRate,
+                                            it.channelConfig,
+                                            it.byteFormat
+                                        )
+                                        val pcmBuffer = CircularPcmBuffer(bufferSize * 64)
 
-                                    val bufferSize = AudioRecord.getMinBufferSize(
-                                        it.sampleRate,
-                                        it.channelConfig,
-                                        it.byteFormat
-                                    )
-                                    val pcmBuffer = CircularPcmBuffer(bufferSize * 64)
+                                        // All player setup must be done on the same thread
+                                        val renderersFactory = CustomAudioRenderersFactory(application, pcmBuffer)
+                                        // TODO add video renderer
+                                        val exoPlayerInstance = ExoPlayer.Builder(application, renderersFactory).build()
 
-                                    val renderersFactory = CustomAudioRenderersFactory(application, pcmBuffer)
-                                    // TODO add video renderer
-                                    val exoPlayerInstance = ExoPlayer.Builder(application, renderersFactory).build()
-
-
-                                    // TODO Do I need this main thread thing?
-                                    withContext(Dispatchers.Main) {
+                                        // Set the media source. This can be done on the background thread as ExoPlayer is thread-agnostic for this call
                                         val mediaItem = MediaItem.fromUri("rtmp://localhost:1935/publish/live")
                                         val mediaSource = ProgressiveMediaSource.Factory(
                                             DefaultDataSource.Factory(application)
                                         ).createMediaSource(mediaItem)
                                         exoPlayerInstance.setMediaSource(mediaSource)
-                                    }
 
-                                    val audioRecordWrapper = AudioRecordWrapper3(exoPlayerInstance, pcmBuffer)
+                                        val audioRecordWrapper = AudioRecordWrapper3(exoPlayerInstance, pcmBuffer)
+                                        BufferVisualizerModel.circularPcmBuffer = pcmBuffer
+                                        val bufferVisualizerModel = BufferVisualizerModel
 
-                                    BufferVisualizerModel.circularPcmBuffer = pcmBuffer
-                                    bufferVisualizerModel = BufferVisualizerModel
-
-                                    streamer.setVideoSource(CustomStreamPackSourceInternal.Factory(exoPlayerInstance))
-                                    streamer.setAudioSource(CustomAudioInput3.Factory(
-                                        audioRecordWrapper,
-                                        bufferVisualizerModel as BufferVisualizerModel
-                                    ))
+                                        // Now, safely pass the player and wrapper back to the main thread if needed
+//                                        withContext(Dispatchers.Main) {
+                                            streamer.setVideoSource(CustomStreamPackSourceInternal.Factory(exoPlayerInstance))
+                                            streamer.setAudioSource(CustomAudioInput3.Factory(
+                                                audioRecordWrapper,
+                                                bufferVisualizerModel
+                                            ))
+//                                        }
+//                                    }
                                 } ?: Log.i(TAG, "Audio is disabled")
                             }
                         }
+
+
+//                    storageRepository.audioConfigFlow
+//                        .collect { config ->
+//                            if (ActivityCompat.checkSelfPermission(
+//                                    application,
+//                                    Manifest.permission.RECORD_AUDIO
+//                                ) == PackageManager.PERMISSION_GRANTED
+//                            ) {
+//                                config?.let {
+//
+//                                    val bufferSize = AudioRecord.getMinBufferSize(
+//                                        it.sampleRate,
+//                                        it.channelConfig,
+//                                        it.byteFormat
+//                                    )
+//                                    val pcmBuffer = CircularPcmBuffer(bufferSize * 64)
+//
+//                                    val renderersFactory = CustomAudioRenderersFactory(application, pcmBuffer)
+//                                    // TODO add video renderer
+//                                    val exoPlayerInstance = ExoPlayer.Builder(application, renderersFactory).build()
+//
+//
+//                                    Handler(Looper.getMainLooper()).post {
+////                                    withContext(Dispatchers.Main) {
+//                                        val mediaItem = MediaItem.fromUri("rtmp://localhost:1935/publish/live")
+//                                        val mediaSource = ProgressiveMediaSource.Factory(
+//                                            DefaultDataSource.Factory(application)
+//                                        ).createMediaSource(mediaItem)
+//                                        exoPlayerInstance.setMediaSource(mediaSource)
+//                                    }
+//
+//                                    val audioRecordWrapper = AudioRecordWrapper3(exoPlayerInstance, pcmBuffer)
+//
+//                                    BufferVisualizerModel.circularPcmBuffer = pcmBuffer
+//                                    bufferVisualizerModel = BufferVisualizerModel
+//
+//                                    streamer.setVideoSource(CustomStreamPackSourceInternal.Factory(exoPlayerInstance))
+//                                    streamer.setAudioSource(CustomAudioInput3.Factory(
+//                                        audioRecordWrapper,
+//                                        bufferVisualizerModel as BufferVisualizerModel
+//                                    ))
+//                                } ?: Log.i(TAG, "Audio is disabled")
+//                            }
+//                        }
+
+
                 }
 //                is IBitmapSource -> {
 //                    CameraSourceFactory()
