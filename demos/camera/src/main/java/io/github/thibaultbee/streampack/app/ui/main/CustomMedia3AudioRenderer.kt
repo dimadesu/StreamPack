@@ -1,5 +1,7 @@
 package io.github.thibaultbee.streampack.app.ui.main
 
+import android.os.Handler
+import android.os.HandlerThread
 import androidx.media3.common.Format
 import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
 import androidx.media3.exoplayer.mediacodec.MediaCodecAdapter
@@ -12,6 +14,10 @@ class CustomMedia3AudioRenderer(
     private val audioBuffer: CircularPcmBuffer
 ) : MediaCodecAudioRenderer(context, mediaCodecSelector) {
     private val _isDecodeOnlyBuffer = true
+
+    // Initialize a HandlerThread for background processing
+    private val handlerThread = HandlerThread("AudioRendererThread").apply { start() }
+    private val backgroundHandler = Handler(handlerThread.looper)
 
     override fun processOutputBuffer(
         positionUs: Long,
@@ -28,11 +34,37 @@ class CustomMedia3AudioRenderer(
     ): Boolean {
         // Intercept decoded audio data
         if (buffer != null) {
-//            android.util.Log.i("CustomMedia3AudioRenderer", "(render-write)")
-            val bytesWritten = audioBuffer.write(buffer)
+            // Copy the buffer data to ensure it remains accessible
+            val copiedBuffer = ByteBuffer.allocateDirect(buffer.remaining())
+            copiedBuffer.put(buffer)
+            copiedBuffer.flip()
+
+            // Offload the write operation to the background thread
+            backgroundHandler.post {
+                audioBuffer.write(copiedBuffer)
+            }
         }
 
-        return super.processOutputBuffer(positionUs, elapsedRealtimeUs, codecAdapter, buffer, bufferIndex, bufferFlags, sampleCount, bufferPresentationTimeUs, _isDecodeOnlyBuffer, isLastBuffer, format)
+        return super.processOutputBuffer(
+            positionUs,
+            elapsedRealtimeUs,
+            codecAdapter,
+            buffer,
+            bufferIndex,
+            bufferFlags,
+            sampleCount,
+            bufferPresentationTimeUs,
+            _isDecodeOnlyBuffer,
+            isLastBuffer,
+            format
+        )
+    }
 
+    override fun onRelease() {
+        // First, call the superclass method to ensure its cleanup logic runs.
+        super.onRelease()
+
+        // Now, safely quit your custom HandlerThread.
+        handlerThread.quitSafely()
     }
 }
