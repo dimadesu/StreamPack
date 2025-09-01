@@ -364,7 +364,10 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                                         // All player setup must be done on the same thread
                                         val renderersFactory = CustomAudioRenderersFactory(application, pcmBuffer)
                                         // TODO add video renderer
-                                        val exoPlayerInstance = ExoPlayer.Builder(application, renderersFactory).build()
+                                        val exoPlayerInstance = ExoPlayer.Builder(
+                                            application,
+                                            renderersFactory
+                                        ).build()
 
                                         // Set the media source. This can be done on the background thread as ExoPlayer is thread-agnostic for this call
                                         val mediaItem = MediaItem.fromUri("rtmp://localhost:1935/publish/live")
