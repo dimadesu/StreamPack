@@ -55,28 +55,16 @@ class CustomAudioInput3(
 
     override fun getAudioFrame(frameFactory: IReadOnlyRawFrameFactory): RawFrame {
         val buffer = frameFactory.create(bufferSize!!, 0)
-        val length = audioRecordWrapper.read(buffer.rawBuffer, buffer.rawBuffer.remaining()) ?: 0
-        if (length > 0) {
-            buffer.timestampInUs = System.nanoTime() / 1000
-            buffer.rawBuffer
-            return buffer
-        } else {
-            buffer.close()
-            throw IllegalStateException("Failed to read audio data")
-        }
+        audioRecordWrapper.read(buffer.rawBuffer, buffer.rawBuffer.remaining())
+        buffer.timestampInUs = System.nanoTime() / 1000
+        return buffer
     }
 
     override fun fillAudioFrame(frame: RawFrame): RawFrame {
         val buffer = frame.rawBuffer
-        val length = audioRecordWrapper.read(buffer, buffer.remaining())
-        if (length > 0) {
-            frame.timestampInUs = System.nanoTime() / 1000
-            buffer
-            return frame
-        } else {
-            frame.close()
-            throw IllegalStateException("Failed to read audio data")
-        }
+        audioRecordWrapper.read(buffer, buffer.remaining())
+        frame.timestampInUs = System.nanoTime() / 1000
+        return frame
     }
 
     class Factory(

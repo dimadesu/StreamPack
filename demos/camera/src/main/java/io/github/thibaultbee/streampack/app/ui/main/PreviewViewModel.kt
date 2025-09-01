@@ -34,6 +34,7 @@ import androidx.lifecycle.asLiveData
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import io.github.thibaultbee.streampack.app.BR
@@ -70,6 +71,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+
 
 class PreviewViewModel(private val application: Application) : ObservableViewModel() {
     private val storageRepository = DataStoreRepository(application, application.dataStore)
@@ -158,13 +160,29 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                                     )
                                     val pcmBuffer = CircularPcmBuffer(bufferSize * 4)
 
+
+
+//                                    val loadControl = DefaultLoadControl.Builder()
+//                                        .setBufferDurationsMs(
+//                                            100,  // minBufferMs
+//                                            1000, // maxBufferMs
+//                                            100,  // bufferForPlaybackMs
+//                                            50    // bufferForPlaybackAfterRebufferMs
+//                                        )
+//                                        .setPrioritizeTimeOverSizeThresholds(true)
+//                                        .setTargetBufferBytes(DefaultLoadControl.DEFAULT_TARGET_BUFFER_BYTES)
+//                                        .build()
+
                                     // All player setup must be done on the same thread
                                     val renderersFactory = CustomAudioRenderersFactory(application, pcmBuffer)
                                     // TODO add video renderer
-                                    val exoPlayerInstance = ExoPlayer.Builder(
+                                    val exoPlayerInstance = ExoPlayer
+                                        .Builder(
                                         application,
-                                        renderersFactory
-                                    ).build()
+                                            renderersFactory
+                                        )
+//                                        .setLoadControl(loadControl)
+                                        .build()
 
                                     // Set the media source. This can be done on the background thread as ExoPlayer is thread-agnostic for this call
                                     val mediaItem = MediaItem.fromUri("rtmp://localhost:1935/publish/live")
@@ -415,13 +433,26 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                                         )
                                         val pcmBuffer = CircularPcmBuffer(bufferSize * 4)
 
+                                        val loadControl = DefaultLoadControl.Builder()
+                                            .setTargetBufferBytes(bufferSize)
+                                            .setBufferDurationsMs(
+                                                3000,  // Minimum buffer before starting playback (e.g., 15000)
+                                                5000,  // Maximum buffer size (e.g., 50000)
+                                                2500,  // Buffer before starting playback after a seek (e.g., 2500)
+                                                5000 // Buffer after rebuffer (e.g., 5000)
+                                            )
+                                            .build()
+
                                         // All player setup must be done on the same thread
                                         val renderersFactory = CustomAudioRenderersFactory(application, pcmBuffer)
                                         // TODO add video renderer
-                                        val exoPlayerInstance = ExoPlayer.Builder(
-                                            application,
-                                            renderersFactory
-                                        ).build()
+                                        val exoPlayerInstance = ExoPlayer
+                                            .Builder(
+                                                application,
+                                                renderersFactory
+                                            )
+//                                            .setLoadControl(loadControl)
+                                            .build()
 
                                         // Set the media source. This can be done on the background thread as ExoPlayer is thread-agnostic for this call
                                         val mediaItem = MediaItem.fromUri("rtmp://localhost:1935/publish/live")

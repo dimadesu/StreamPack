@@ -95,7 +95,7 @@ class CircularPcmBuffer(private val bufferSize: Int) {
      * Returns the number of bytes actually written.
      */
     @Synchronized
-    fun write(src: ByteBuffer, writeMode: Int = WRITE_BLOCKING): Int {
+    fun write(src: ByteBuffer, writeMode: Int = WRITE_NON_BLOCKING): Int {
         lock.lock()
         try {
             if (src.remaining() < 0 || !src.isDirect) {
