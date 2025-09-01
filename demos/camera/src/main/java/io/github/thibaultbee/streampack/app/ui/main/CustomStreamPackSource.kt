@@ -30,19 +30,17 @@ class CustomStreamPackSourceInternal (
     private var previewPlayer: ExoPlayer? = null // For preview
 
     override suspend fun startStream() {
-//        Handler(Looper.getMainLooper()).post {
-//            exoPlayer.prepare()
-//            exoPlayer.playWhenReady = true
-//        }
+        Handler(Looper.getMainLooper()).post {
+            exoPlayer.prepare()
+            exoPlayer.playWhenReady = true
+        }
         _isStreamingFlow.value = true
     }
 
     override suspend fun stopStream() {
-//        withContext(Dispatchers.Main) {
-//        Handler(Looper.getMainLooper()).post {
-//            exoPlayer.stop()
-////        }
-//        }
+        Handler(Looper.getMainLooper()).post {
+            exoPlayer.stop()
+        }
         _isStreamingFlow.value = false
     }
 
