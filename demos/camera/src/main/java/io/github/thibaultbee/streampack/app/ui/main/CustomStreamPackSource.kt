@@ -6,6 +6,7 @@ import android.os.Looper
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import io.github.thibaultbee.streampack.app.sources.audio.AudioRecordWrapper3
 import io.github.thibaultbee.streampack.core.elements.processing.video.source.ISourceInfoProvider
 import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoSourceInternal
 import io.github.thibaultbee.streampack.core.elements.sources.video.VideoSourceConfig
@@ -17,7 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class CustomStreamPackSourceInternal (
-    private val context: Context,
+    private val exoPlayer: ExoPlayer,
 ) : AbstractPreviewableSource(), IVideoSourceInternal {
     override val infoProviderFlow: StateFlow<ISourceInfoProvider> = MutableStateFlow(object : ISourceInfoProvider {
         override fun getSurfaceSize(targetResolution: android.util.Size): android.util.Size = targetResolution
@@ -26,13 +27,12 @@ class CustomStreamPackSourceInternal (
     })
     private val _isStreamingFlow = MutableStateFlow(false)
     override val isStreamingFlow: StateFlow<Boolean> get() = _isStreamingFlow
-    private var exoPlayer: ExoPlayer? = null // For output
     private var previewPlayer: ExoPlayer? = null // For preview
 
     override suspend fun startStream() {
         withContext(Dispatchers.Main) {
-            exoPlayer?.prepare()
-            exoPlayer?.playWhenReady = true
+            exoPlayer.prepare()
+            exoPlayer.playWhenReady = true
         }
         _isStreamingFlow.value = true
     }
@@ -40,37 +40,17 @@ class CustomStreamPackSourceInternal (
     override suspend fun stopStream() {
 //        withContext(Dispatchers.Main) {
         Handler(Looper.getMainLooper()).post {
-            exoPlayer?.stop()
+            exoPlayer.stop()
 //        }
         }
         _isStreamingFlow.value = false
     }
 
     override suspend fun configure(config: VideoSourceConfig) {
-        val rtmpUrl = "rtmp://localhost:1935/publish/live"
-        val mediaItem = MediaItem.fromUri(rtmpUrl)
-        val mediaSource = ProgressiveMediaSource.Factory(
-            try {
-                androidx.media3.datasource.rtmp.RtmpDataSource.Factory()
-            } catch (e: Exception) {
-                androidx.media3.datasource.DefaultDataSource.Factory(context)
-            }
-        ).createMediaSource(mediaItem)
-        val mediaSourcePreview = ProgressiveMediaSource.Factory(
-            try {
-                androidx.media3.datasource.rtmp.RtmpDataSource.Factory()
-            } catch (e: Exception) {
-                androidx.media3.datasource.DefaultDataSource.Factory(context)
-            }
-        ).createMediaSource(mediaItem)
-
-        exoPlayer = ExoPlayer.Builder(context).build()
         // TODO: Too much echo atm
 //        previewPlayer = ExoPlayer.Builder(context).build()
 
         withContext(Dispatchers.Main) {
-            exoPlayer?.setMediaSource(mediaSource)
-            previewPlayer?.setMediaSource(mediaSourcePreview)
             previewPlayer?.prepare()
             previewPlayer?.playWhenReady = true
         }
@@ -78,14 +58,13 @@ class CustomStreamPackSourceInternal (
 
     override fun release() {
 //        if (Looper.myLooper() == Looper.getMainLooper()) {
-//            exoPlayer?.release()
+//            exoPlayer.release()
 //            exoPlayer = null
 //            previewPlayer?.release()
 //            previewPlayer = null
 //        } else {
             Handler(Looper.getMainLooper()).post {
-                exoPlayer?.release()
-                exoPlayer = null
+                exoPlayer.release()
                 previewPlayer?.release()
                 previewPlayer = null
 //            }
@@ -110,7 +89,7 @@ class CustomStreamPackSourceInternal (
     override suspend fun setOutput(surface: android.view.Surface) {
         outputSurface = surface
         withContext(Dispatchers.Main) {
-            exoPlayer?.setVideoSurface(surface)
+            exoPlayer.setVideoSurface(surface)
         }
     }
 
@@ -167,9 +146,11 @@ class CustomStreamPackSourceInternal (
     override suspend fun resetOutputImpl() {
     }
 
-    class Factory() : IVideoSourceInternal.Factory {
+    class Factory(
+        private val exoPlayer: ExoPlayer,
+    ) : IVideoSourceInternal.Factory {
         override suspend fun create(context: Context): IVideoSourceInternal {
-            val customSrc = CustomStreamPackSourceInternal(context)
+            val customSrc = CustomStreamPackSourceInternal(exoPlayer)
             return customSrc
         }
 

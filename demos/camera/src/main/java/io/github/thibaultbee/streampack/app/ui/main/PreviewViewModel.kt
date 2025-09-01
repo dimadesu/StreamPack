@@ -378,7 +378,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                                     BufferVisualizerModel.circularPcmBuffer = pcmBuffer
                                     bufferVisualizerModel = BufferVisualizerModel
 
-                                    streamer.setVideoSource(CustomStreamPackSourceInternal.Factory())
+                                    streamer.setVideoSource(CustomStreamPackSourceInternal.Factory(exoPlayerInstance))
                                     streamer.setAudioSource(CustomAudioInput3.Factory(
                                         audioRecordWrapper,
                                         bufferVisualizerModel as BufferVisualizerModel
