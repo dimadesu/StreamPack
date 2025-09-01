@@ -22,8 +22,6 @@ import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.hardware.camera2.CaptureResult
 import android.media.AudioRecord
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import android.util.Range
 import android.util.Rational
@@ -45,7 +43,6 @@ import io.github.thibaultbee.streampack.app.data.storage.DataStoreRepository
 import io.github.thibaultbee.streampack.app.sources.audio.AudioRecordWrapper3
 import io.github.thibaultbee.streampack.app.sources.audio.CustomAudioInput3
 import io.github.thibaultbee.streampack.app.ui.main.usecases.BuildStreamerUseCase
-import io.github.thibaultbee.streampack.app.ui.main.BufferVisualizerModel
 import io.github.thibaultbee.streampack.app.utils.ObservableViewModel
 import io.github.thibaultbee.streampack.app.utils.dataStore
 import io.github.thibaultbee.streampack.app.utils.isEmpty
@@ -55,8 +52,6 @@ import io.github.thibaultbee.streampack.core.configuration.mediadescriptor.UriMe
 import io.github.thibaultbee.streampack.core.elements.endpoints.MediaSinkType
 import io.github.thibaultbee.streampack.core.elements.sources.audio.audiorecord.IAudioRecordSource
 import io.github.thibaultbee.streampack.core.elements.sources.audio.audiorecord.MicrophoneSourceFactory
-import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoSource
-import io.github.thibaultbee.streampack.core.elements.sources.video.bitmap.IBitmapSource
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.CameraSettings
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.CameraSourceFactory
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.ICameraSource
@@ -67,7 +62,6 @@ import io.github.thibaultbee.streampack.core.interfaces.startStream
 import io.github.thibaultbee.streampack.core.streamers.single.SingleStreamer
 import io.github.thibaultbee.streampack.core.utils.extensions.isClosedException
 import io.github.thibaultbee.streampack.ext.srt.regulator.controllers.DefaultSrtBitrateRegulatorController
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
@@ -76,7 +70,6 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class PreviewViewModel(private val application: Application) : ObservableViewModel() {
     private val storageRepository = DataStoreRepository(application, application.dataStore)
@@ -338,7 +331,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     }
 
     @RequiresPermission(Manifest.permission.CAMERA)
-    fun toggleVideoSource() {
+    fun toggleVideoSource(bufferVisualizer: BufferVisualizerView) {
         val videoSource = streamer.videoInput?.sourceFlow?.value
         viewModelScope.launch {
             val nextSource = when (videoSource) {
@@ -378,14 +371,15 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
                                         val audioRecordWrapper = AudioRecordWrapper3(exoPlayerInstance, pcmBuffer)
                                         BufferVisualizerModel.circularPcmBuffer = pcmBuffer
-                                        val bufferVisualizerModel = BufferVisualizerModel
+                                        bufferVisualizerModel = BufferVisualizerModel
+                                        bufferVisualizer.startObserving()
 
                                         // Now, safely pass the player and wrapper back to the main thread if needed
 //                                        withContext(Dispatchers.Main) {
                                             streamer.setVideoSource(CustomStreamPackSourceInternal.Factory(exoPlayerInstance))
                                             streamer.setAudioSource(CustomAudioInput3.Factory(
                                                 audioRecordWrapper,
-                                                bufferVisualizerModel
+                                                bufferVisualizerModel as BufferVisualizerModel
                                             ))
 //                                        }
 //                                    }
@@ -449,6 +443,8 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 //                }
                 else -> {
 //                    Log.i(TAG, "Unknown video source. Fallback to camera sources")
+                    bufferVisualizer.stopObserving()
+                    BufferVisualizerModel.circularPcmBuffer = null
                     bufferVisualizerModel = null
                     streamer.setVideoSource(CameraSourceFactory())
                     streamer.setAudioSource(MicrophoneSourceFactory())

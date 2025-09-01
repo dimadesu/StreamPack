@@ -22,7 +22,7 @@ class BufferVisualizerView @JvmOverloads constructor(
         style = Paint.Style.FILL
     }
 
-    var bufferVisualizerModel: BufferVisualizerModel? = null
+    var previewViewModel: PreviewViewModel? = null
 
     private var scheduler = Executors.newSingleThreadScheduledExecutor()
 
@@ -45,7 +45,7 @@ class BufferVisualizerView @JvmOverloads constructor(
             // Clear the canvas at the start
             canvas.drawColor(Color.BLACK)
 
-            bufferVisualizerModel?.circularPcmBuffer?.let { buffer ->
+            previewViewModel?.bufferVisualizerModel?.circularPcmBuffer?.let { buffer ->
                 val bufferSize = buffer.capacity
                 val availableData = buffer.availableData
 //                android.util.Log.d("BufferVisualizerView", "Available data: $availableData, Buffer size: $bufferSize")
@@ -72,6 +72,9 @@ class BufferVisualizerView @JvmOverloads constructor(
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {
+    }
+
+    fun startObserving() {
         isStreamingObserver = { isStreaming ->
             if (isStreaming) {
                 startDrawing()
@@ -79,7 +82,14 @@ class BufferVisualizerView @JvmOverloads constructor(
                 stopDrawing()
             }
         }
-        bufferVisualizerModel?.isStreaming?.observeForever(isStreamingObserver!!)
+        previewViewModel?.bufferVisualizerModel?.isStreaming?.observeForever(isStreamingObserver!!)
+    }
+
+    fun stopObserving() {
+        isStreamingObserver?.let {
+            previewViewModel?.bufferVisualizerModel?.isStreaming?.removeObserver(it)
+            isStreamingObserver = null
+        }
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
@@ -90,12 +100,8 @@ class BufferVisualizerView @JvmOverloads constructor(
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
-        isStreamingObserver?.let {
-            bufferVisualizerModel?.isStreaming?.removeObserver(it)
-        }
-        isStreamingObserver = null
+        stopObserving()
         stopDrawing()
-        bufferVisualizerModel = null // Remove reference to avoid memory leaks
     }
 
     fun startDrawing() {

@@ -108,7 +108,7 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
         binding = MainFragmentBinding.inflate(inflater, container, false)
         binding.lifecycleOwner = this
         binding.viewmodel = previewViewModel
-        binding.bufferVisualizer.bufferVisualizerModel = previewViewModel.bufferVisualizerModel
+        binding.bufferVisualizer.previewViewModel = previewViewModel
 
         bindProperties()
         return binding.root
@@ -129,6 +129,11 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
 
         binding.playRtmpButton.setOnClickListener {
             toggleRtmpStream()
+        }
+
+        binding.switchSourceButton.setOnClickListener {
+            binding.bufferVisualizer.previewViewModel = previewViewModel
+            previewViewModel.toggleVideoSource(binding.bufferVisualizer)
         }
 
         previewViewModel.streamerErrorLiveData.observe(viewLifecycleOwner) {
