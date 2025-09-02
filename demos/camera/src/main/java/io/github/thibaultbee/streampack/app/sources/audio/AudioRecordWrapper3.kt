@@ -54,35 +54,18 @@ class AudioRecordWrapper3(
        Handler(Looper.getMainLooper()).post {
            exoPlayer.stop()
        }
-       audioBuffer.clear()
     }
 
     /**
-     * Reads audio data into the provided buffer and returns a Pair of bytes read and the timestamp.
+     * Reads audio data into the provided buffer.
      */
-    fun read(buffer: ByteBuffer, size: Int): Pair<Int, Long?> {
-//        android.util.Log.w(TAG, "1111")
-        val frame = audioBuffer.readFrame()
+    fun read(buffer: ByteBuffer, size: Int): Int {
+        val audioBuffer = this.audioBuffer ?: throw IllegalStateException("audioBuffer is not initialized. Call config() first.")
+        // Read data from CircularPcmBuffer into the ByteBuffer
+        val bytesRead = audioBuffer.read(buffer, size)
 
-        if (frame == null) {
-//            android.util.Log.w(TAG, "Audio buffer is empty, returning 0 bytes and null timestamp.")
-            return Pair(0, null) // Return 0 bytes read and null timestamp if the buffer is empty
-        }
-
-//        android.util.Log.w(TAG, "2222")
-
-        val (data, timestamp) = frame
-
-//        android.util.Log.w(TAG, "3333")
-
-        val bytesToRead = minOf(size, data.size)
-
-//        android.util.Log.w(TAG, "4444")
-
-        buffer.put(data, 0, bytesToRead)
-
-        android.util.Log.d(TAG, "Audio received $bytesToRead bytes, timestamp: $timestamp")
-        return Pair(bytesToRead, timestamp)
+        // Return the number of bytes read
+        return bytesRead
     }
 
     /**
@@ -94,9 +77,10 @@ class AudioRecordWrapper3(
 //            exoPlayer.release()
 //            exoPlayer = null
 //       } else {
-        Handler(Looper.getMainLooper()).post {
-           exoPlayer.release()
-        }
+           Handler(Looper.getMainLooper()).post {
+               exoPlayer.release()
+//           }
+       }
         audioBuffer.clear()
     }
 }

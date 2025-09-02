@@ -55,21 +55,19 @@ class CustomAudioInput3(
 
     override fun getAudioFrame(frameFactory: IReadOnlyRawFrameFactory): RawFrame {
         val buffer = frameFactory.create(bufferSize!!, 0)
-        val (bytesRead, timestamp) = audioRecordWrapper.read(buffer.rawBuffer, buffer.rawBuffer.remaining())
-        buffer.timestampInUs = timestamp ?: (System.nanoTime() / 1000)
+        val bytesRead = audioRecordWrapper.read(buffer.rawBuffer, buffer.rawBuffer.remaining())
+        buffer.timestampInUs = System.nanoTime()
         buffer.rawBuffer.flip()
         return buffer
     }
 
     override fun fillAudioFrame(frame: RawFrame): RawFrame {
         val buffer = frame.rawBuffer
-        val (bytesRead, timestamp) = audioRecordWrapper.read(buffer, buffer.remaining())
-        frame.timestampInUs = timestamp ?: (System.nanoTime() / 1000)
-//        frame.timestampInUs = (System.nanoTime() + 10_000_000) / 1000
+        val bytesRead = audioRecordWrapper.read(buffer, buffer.remaining())
+        frame.timestampInUs = System.nanoTime() / 1000
 //        if (bytesRead > 0) {
 //            android.util.Log.d(TAG, "Audio bytes read: $bytesRead, Timestamp: ${frame.timestampInUs}")
 //        }
-//        frame.timestampInUs = System.nanoTime() / 1000
         buffer.flip()
         return frame
     }

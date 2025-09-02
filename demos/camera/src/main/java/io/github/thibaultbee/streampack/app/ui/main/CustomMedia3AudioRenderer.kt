@@ -37,8 +37,10 @@ class CustomMedia3AudioRenderer(
        // Intercept decoded audio data
        if (buffer != null) {
            if (buffer.remaining() > 0) {
-               android.util.Log.w("CustomMedia3AudioRenderer", "positionUs $positionUs, bufferPresentationTimeUs $bufferPresentationTimeUs, elapsedRealtimeUs $elapsedRealtimeUs, sampleCount=$sampleCount, format $format")
-               audioBuffer.writeFrame(buffer, bufferPresentationTimeUs)
+//               android.util.Log.w("CustomMedia3AudioRenderer", "positionUs $positionUs, bufferPresentationTimeUs $bufferPresentationTimeUs, elapsedRealtimeUs $elapsedRealtimeUs, sampleCount=$sampleCount, format $format")
+               // TODO pass bufferPresentationTimeUs
+               audioBuffer.write(buffer)
+               buffer.rewind()
            }
        }
 
