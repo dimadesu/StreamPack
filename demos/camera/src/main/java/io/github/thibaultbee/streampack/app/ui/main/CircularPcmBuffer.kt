@@ -38,6 +38,8 @@ class CircularPcmBuffer(private val bufferSize: Int) {
 
         val audioData = ByteArray(data.remaining())
         data.get(audioData)
+        // Important!
+        data.rewind()
         frameBuffer.addLast(AudioFrame(audioData, timestamp))
         return true
     }

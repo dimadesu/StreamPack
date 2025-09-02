@@ -35,27 +35,12 @@ class CustomMedia3AudioRenderer(
        // Intercept decoded audio data
        if (buffer != null) {
            // Copy the buffer data to ensure it remains accessible
-           val copiedBuffer = ByteBuffer.allocateDirect(buffer.remaining())
-//            copiedBuffer.put(buffer)
-// //           copiedBuffer.flip()
-
-// android.util.Log.d("CustomMedia3AudioRenderer", "Buffer remaining: ${buffer.remaining()}")
-// android.util.Log.d("CustomMedia3AudioRenderer", "Copied buffer capacity: ${copiedBuffer.capacity()}")
-
-if (buffer.remaining() > 0) {
-    android.util.Log.w("CustomMedia3AudioRenderer", "buffer.remaining() ${buffer.remaining()}")
-    val copiedBuffer = ByteBuffer.allocateDirect(buffer.remaining())
-    copiedBuffer.put(buffer)
-    buffer.rewind()
-//     copiedBuffer.flip()
-} else {
-    android.util.Log.w("CustomMedia3AudioRenderer", "Buffer is empty, skipping copy.")
-}
-
-           // Offload the write operation to the background thread
-//           backgroundHandler.post {
-//               audioBuffer.writeFrame(copiedBuffer, bufferPresentationTimeUs)
-//           }
+            if (buffer.remaining() > 0) {
+//                android.util.Log.w("CustomMedia3AudioRenderer", "buffer.remaining() ${buffer.remaining()}")
+                audioBuffer.writeFrame(buffer, bufferPresentationTimeUs)
+            } else {
+//                android.util.Log.w("CustomMedia3AudioRenderer", "Buffer is empty, skipping copy.")
+            }
        }
 
        return super.processOutputBuffer(
