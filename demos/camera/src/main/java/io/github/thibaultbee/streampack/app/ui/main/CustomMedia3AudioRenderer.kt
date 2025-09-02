@@ -38,8 +38,7 @@ class CustomMedia3AudioRenderer(
        if (buffer != null) {
            if (buffer.remaining() > 0) {
 //               android.util.Log.w("CustomMedia3AudioRenderer", "positionUs $positionUs, bufferPresentationTimeUs $bufferPresentationTimeUs, elapsedRealtimeUs $elapsedRealtimeUs, sampleCount=$sampleCount, format $format")
-               // TODO pass bufferPresentationTimeUs
-               audioBuffer.write(buffer)
+               audioBuffer.writeFrame(buffer, bufferPresentationTimeUs)
            }
        }
 

@@ -1,15 +1,24 @@
 package io.github.thibaultbee.streampack.app.ui.main
 
 import java.nio.ByteBuffer
+import java.util.concurrent.ArrayBlockingQueue
 
 /**
  * Circular PCM buffer for audio streaming. Thread-safe for single producer/single consumer.
  */
 class CircularPcmBuffer(private val bufferSize: Int) {
-    private val playerBuffer = ByteArray(bufferSize)
     private var readPos = 0
     private var writePos = 0
     private var availableBytes = 0
+
+    // Add a buffer pool to reuse ByteBuffer instances
+    private val bufferPool = ArrayBlockingQueue<ByteBuffer>(100)
+
+    // Define the AudioFrame data class
+    private data class AudioFrame(val data: ByteBuffer, val timestamp: Long)
+
+    // Define the frameBuffer queue
+    private val frameBuffer = ArrayBlockingQueue<AudioFrame>(100)
 
     val availableData: Int
         get() = availableBytes
@@ -28,59 +37,57 @@ class CircularPcmBuffer(private val bufferSize: Int) {
         availableBytes = 0
     }
 
-    private val fillThreshold = (bufferSize * 0.1).toInt() // 80% of the buffer size
-    private var isFilling = true // Tracks whether the buffer is in the filling phase
-
-    /**
-     * Reads up to [dest.remaining()] bytes into [mediaCodecBuffer] ByteBuffer.
-     * Returns the number of bytes actually read.
-     */
-    fun read(mediaCodecBuffer: ByteBuffer, size: Int): Int {
-        if (isFilling) {
-            // Transition to draining phase if the buffer reaches the threshold
-            if (availableBytes >= fillThreshold) {
-                isFilling = false
-            }
-            return 0
-        }
-
-        var bytesRead = 0
-        // Buffer is in the draining phase, read data into mediaCodecBuffer
-        val bytesToRead = minOf(size, availableBytes)
-        while (bytesRead < bytesToRead) {
-            mediaCodecBuffer.put(playerBuffer[readPos])
-            readPos = (readPos + 1) % bufferSize
-            bytesRead++
-        }
-        availableBytes -= bytesRead
-
-        // Transition back to filling phase if the buffer is fully drained
-        if (availableBytes == 0) {
-            isFilling = true
-        }
-
-        return bytesRead
+    private fun getBuffer(size: Int): ByteBuffer {
+        return bufferPool.poll() ?: ByteBuffer.allocate(size)
     }
 
-    /**
-     * Writes up to [src.remaining()] bytes from [src] ByteBuffer.
-     * Returns the number of bytes actually written.
-     */
-    fun write(src: ByteBuffer): Int {
-        val length = src.remaining()
-        val freeSpace = bufferSize - availableBytes
-        val bytesToWrite = minOf(length, freeSpace)
-        var bytesWritten = 0
-//        android.util.Log.i(TAG, "write-to-circular-buffer: requested=$length freeSpaceBefore=$freeSpace availableBefore=$availableBytes readPos=$readPos writePos=$writePos")
-        val savedPosition = src.position()
-        while (bytesWritten < bytesToWrite) {
-            playerBuffer[writePos] = src.get()
-            writePos = (writePos + 1) % bufferSize
-            bytesWritten++
+    private fun releaseBuffer(buffer: ByteBuffer) {
+        buffer.clear()
+        bufferPool.offer(buffer)
+    }
+
+    fun writeFrame(data: ByteBuffer, timestamp: Long): Boolean {
+        // Check if there is enough space in the buffer
+        if (availableBytes + data.remaining() > bufferSize) {
+            return false // Buffer is full
         }
-        src.position(savedPosition)
-        availableBytes += bytesWritten
-//        android.util.Log.d(TAG, "write-to-circular-buffer: bytesWritten=$bytesWritten availableAfter=$availableBytes readPos=$readPos writePos=$writePos")
-        return bytesWritten
+
+        // Reuse or allocate a new ByteBuffer
+        val copiedData = getBuffer(data.remaining())
+        val savedPosition = data.position()
+        copiedData.put(data)
+        data.position(savedPosition)
+
+        val frame = AudioFrame(copiedData, timestamp)
+
+        // Add the copied data to the buffer
+        val success = frameBuffer.offer(frame)
+
+        if (success) {
+            availableBytes += data.remaining()
+        } else {
+            releaseBuffer(copiedData) // Release the buffer if not added
+        }
+
+        return success
+    }
+
+    fun readFrame(): Pair<ByteBuffer, Long>? {
+        val frame = frameBuffer.poll() // Thread-safe poll operation
+
+        return if (frame == null) {
+            null // Buffer is empty
+        } else {
+            val duplicateBuffer = frame.data.duplicate()
+            duplicateBuffer.rewind()
+            val remainingBytes = duplicateBuffer.remaining()
+
+            availableBytes -= remainingBytes
+
+            // Release the buffer back to the pool
+            releaseBuffer(frame.data)
+
+            Pair(frame.data, frame.timestamp)
+        }
     }
 }

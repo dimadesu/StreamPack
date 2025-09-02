@@ -65,9 +65,9 @@ class CustomAudioInput3(
         val buffer = frame.rawBuffer
         val bytesRead = audioRecordWrapper.read(buffer, buffer.remaining())
         frame.timestampInUs = System.nanoTime() / 1000
-//        if (bytesRead > 0) {
-//            android.util.Log.d(TAG, "Audio bytes read: $bytesRead, Timestamp: ${frame.timestampInUs}")
-//        }
+        if (bytesRead > 0) {
+            android.util.Log.d(TAG, "Audio bytes read: $bytesRead, Timestamp: ${frame.timestampInUs}")
+        }
         buffer.flip()
         return frame
     }
