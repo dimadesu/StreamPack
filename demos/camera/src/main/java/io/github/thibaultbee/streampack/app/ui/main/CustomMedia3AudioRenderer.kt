@@ -1,7 +1,5 @@
 package io.github.thibaultbee.streampack.app.ui.main
 
-import android.os.Handler
-import android.os.HandlerThread
 import androidx.media3.common.Format
 import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
 import androidx.media3.exoplayer.mediacodec.MediaCodecAdapter
@@ -12,7 +10,10 @@ class CustomMedia3AudioRenderer(
     context: android.content.Context,
     mediaCodecSelector: MediaCodecSelector,
     private val audioBuffer: CircularPcmBuffer
-) : MediaCodecAudioRenderer(context, mediaCodecSelector) {
+) : MediaCodecAudioRenderer(
+        context,
+        mediaCodecSelector,
+) {
    private val _isDecodeOnlyBuffer = false
 
    // Initialize a HandlerThread for background processing
@@ -32,16 +33,17 @@ class CustomMedia3AudioRenderer(
        isLastBuffer: Boolean,
        format: Format
    ): Boolean {
+
        // Intercept decoded audio data
        if (buffer != null) {
-           // Copy the buffer data to ensure it remains accessible
-            if (buffer.remaining() > 0) {
-//                android.util.Log.w("CustomMedia3AudioRenderer", "buffer.remaining() ${buffer.remaining()}")
-                audioBuffer.writeFrame(buffer, positionUs)
-            } else {
-//                android.util.Log.w("CustomMedia3AudioRenderer", "Buffer is empty, skipping copy.")
-            }
+           if (buffer.remaining() > 0) {
+               android.util.Log.w("CustomMedia3AudioRenderer", "positionUs $positionUs, bufferPresentationTimeUs $bufferPresentationTimeUs, elapsedRealtimeUs $elapsedRealtimeUs, sampleCount=$sampleCount, format $format")
+               audioBuffer.writeFrame(buffer, bufferPresentationTimeUs)
+           }
        }
+
+//       codecAdapter?.releaseOutputBuffer(bufferIndex, true)
+//       return true;
 
        return super.processOutputBuffer(
            positionUs,

@@ -181,7 +181,7 @@ private class DefaultSurfaceProcessor(
 
     // Executed on GL thread
     override fun onFrameAvailable(surfaceTexture: SurfaceTexture) {
-        Log.d(TAG, "Video frame is available with timestamp: ${surfaceTexture.timestamp}")
+        Log.i(TAG, "Video frame received with timestamp: ${surfaceTexture.timestamp}")
         if (isReleaseRequested.get()) {
             return
         }

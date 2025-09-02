@@ -61,15 +61,27 @@ class AudioRecordWrapper3(
      * Reads audio data into the provided buffer and returns a Pair of bytes read and the timestamp.
      */
     fun read(buffer: ByteBuffer, size: Int): Pair<Int, Long?> {
+//        android.util.Log.w(TAG, "1111")
         val frame = audioBuffer.readFrame()
+
         if (frame == null) {
+//            android.util.Log.w(TAG, "Audio buffer is empty, returning 0 bytes and null timestamp.")
             return Pair(0, null) // Return 0 bytes read and null timestamp if the buffer is empty
         }
 
+//        android.util.Log.w(TAG, "2222")
+
         val (data, timestamp) = frame
+
+//        android.util.Log.w(TAG, "3333")
+
         val bytesToRead = minOf(size, data.size)
+
+//        android.util.Log.w(TAG, "4444")
+
         buffer.put(data, 0, bytesToRead)
 
+        android.util.Log.d(TAG, "Audio received $bytesToRead bytes, timestamp: $timestamp")
         return Pair(bytesToRead, timestamp)
     }
 

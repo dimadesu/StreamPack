@@ -32,9 +32,9 @@ class CircularPcmBuffer(private val bufferSize: Int) {
      */
     @Synchronized
     fun writeFrame(data: ByteBuffer, timestamp: Long): Boolean {
-        if (frameBuffer.size >= bufferSize) {
-            return false // Buffer is full
-        }
+//        if (frameBuffer.size >= bufferSize) {
+//            return false // Buffer is full
+//        }
 
         val audioData = ByteArray(data.remaining())
         data.get(audioData)

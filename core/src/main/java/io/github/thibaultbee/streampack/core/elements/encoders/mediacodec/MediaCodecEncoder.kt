@@ -419,6 +419,7 @@ internal constructor(
 //
         override fun onInputBufferAvailable(codec: MediaCodec, index: Int) {
             encoderExecutor.execute {
+//                Logger.w(tag, "onInputBufferAvailable")
                 when {
                     !state.isRunning -> {
                         Logger.w(tag, "Receives input frame after codec is not running: $state.")
@@ -432,7 +433,7 @@ internal constructor(
 
                     else -> {
                         val frame = try {
-                            //
+                            // TODO Don't request getInputBuffer if we don't have data
                             val buffer = requireNotNull(mediaCodec.getInputBuffer(index))
                             //
                             input.listener.onFrameRequested(buffer)
@@ -448,7 +449,13 @@ internal constructor(
                         }
 
                         try {
-                            queueInputFrame(index, frame)
+                            // Only queue the buffer if it has data
+//                            if (frame.rawBuffer.hasRemaining()) {
+                                queueInputFrame(index, frame)
+//                            } else {
+//                                // Do nothing. The codec will wait for the next frame.
+//                                Logger.w(tag, "Buffer has no remaining data. Not queuing.")
+//                            }
                         } catch (t: Throwable) {
                             handleError(t)
                         } finally {
@@ -494,7 +501,7 @@ internal constructor(
                          index,
                          0,
                          0,
-                         frame.timestampInUs,
+                         0,//frame.timestampInUs,
                          0
                      )
                      return

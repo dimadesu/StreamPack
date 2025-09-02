@@ -460,6 +460,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                                             DefaultDataSource.Factory(application)
                                         ).createMediaSource(mediaItem)
                                         exoPlayerInstance.setMediaSource(mediaSource)
+                                        exoPlayerInstance.volume = 0f
 
                                         val audioRecordWrapper = AudioRecordWrapper3(exoPlayerInstance, pcmBuffer)
                                         BufferVisualizerModel.circularPcmBuffer = pcmBuffer
