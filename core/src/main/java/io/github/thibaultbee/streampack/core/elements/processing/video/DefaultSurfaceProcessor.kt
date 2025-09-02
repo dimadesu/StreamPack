@@ -3,6 +3,7 @@ package io.github.thibaultbee.streampack.core.elements.processing.video
 import android.graphics.SurfaceTexture
 import android.os.Handler
 import android.os.HandlerThread
+import android.util.Log
 import android.util.Size
 import android.view.Surface
 import androidx.concurrent.futures.CallbackToFutureAdapter
@@ -180,6 +181,7 @@ private class DefaultSurfaceProcessor(
 
     // Executed on GL thread
     override fun onFrameAvailable(surfaceTexture: SurfaceTexture) {
+        Log.d(TAG, "Video frame is available with timestamp: ${surfaceTexture.timestamp}")
         if (isReleaseRequested.get()) {
             return
         }

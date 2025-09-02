@@ -13,11 +13,11 @@ class CustomMedia3AudioRenderer(
     mediaCodecSelector: MediaCodecSelector,
     private val audioBuffer: CircularPcmBuffer
 ) : MediaCodecAudioRenderer(context, mediaCodecSelector) {
-   private val _isDecodeOnlyBuffer = true
+   private val _isDecodeOnlyBuffer = false
 
    // Initialize a HandlerThread for background processing
-   private val handlerThread = HandlerThread("AudioRendererThread").apply { start() }
-   private val backgroundHandler = Handler(handlerThread.looper)
+//   private val handlerThread = HandlerThread("AudioRendererThread").apply { start() }
+//   private val backgroundHandler = Handler(handlerThread.looper)
 
    override fun processOutputBuffer(
        positionUs: Long,
@@ -36,13 +36,26 @@ class CustomMedia3AudioRenderer(
        if (buffer != null) {
            // Copy the buffer data to ensure it remains accessible
            val copiedBuffer = ByteBuffer.allocateDirect(buffer.remaining())
-           copiedBuffer.put(buffer)
-           copiedBuffer.flip()
+//            copiedBuffer.put(buffer)
+// //           copiedBuffer.flip()
+
+// android.util.Log.d("CustomMedia3AudioRenderer", "Buffer remaining: ${buffer.remaining()}")
+// android.util.Log.d("CustomMedia3AudioRenderer", "Copied buffer capacity: ${copiedBuffer.capacity()}")
+
+if (buffer.remaining() > 0) {
+    android.util.Log.w("CustomMedia3AudioRenderer", "buffer.remaining() ${buffer.remaining()}")
+    val copiedBuffer = ByteBuffer.allocateDirect(buffer.remaining())
+    copiedBuffer.put(buffer)
+    buffer.rewind()
+//     copiedBuffer.flip()
+} else {
+    android.util.Log.w("CustomMedia3AudioRenderer", "Buffer is empty, skipping copy.")
+}
 
            // Offload the write operation to the background thread
-           backgroundHandler.post {
-               audioBuffer.writeFrame(copiedBuffer, bufferPresentationTimeUs)
-           }
+//           backgroundHandler.post {
+//               audioBuffer.writeFrame(copiedBuffer, bufferPresentationTimeUs)
+//           }
        }
 
        return super.processOutputBuffer(
@@ -65,6 +78,6 @@ class CustomMedia3AudioRenderer(
        super.onRelease()
 
        // Now, safely quit your custom HandlerThread.
-       handlerThread.quitSafely()
+//       handlerThread.quitSafely()
    }
 }

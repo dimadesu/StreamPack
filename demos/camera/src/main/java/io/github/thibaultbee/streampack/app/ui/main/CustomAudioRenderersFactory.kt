@@ -15,27 +15,28 @@ class CustomAudioRenderersFactory(
     private val audioBuffer: CircularPcmBuffer
 ) : DefaultRenderersFactory(context) {
 
-//    override fun buildVideoRenderers(
-//        context: Context,
-//        extensionRendererMode: Int,
-//        mediaCodecSelector: MediaCodecSelector,
-//        enableDecoderFallback: Boolean,
-//        eventHandler: android.os.Handler,
-//        eventListener: androidx.media3.exoplayer.video.VideoRendererEventListener,
-//        allowedVideoJoiningTimeMs: Long,
-//        out: ArrayList<androidx.media3.exoplayer.Renderer>
-//    ) {
-//        super.buildVideoRenderers(
-//            context,
-//            extensionRendererMode,
-//            mediaCodecSelector,
-//            enableDecoderFallback,
-//            eventHandler,
-//            eventListener,
-//            allowedVideoJoiningTimeMs,
-//            out,
-//        )
-//    }
+    override fun buildVideoRenderers(
+        context: Context,
+        extensionRendererMode: Int,
+        mediaCodecSelector: MediaCodecSelector,
+        enableDecoderFallback: Boolean,
+        eventHandler: android.os.Handler,
+        eventListener: androidx.media3.exoplayer.video.VideoRendererEventListener,
+        allowedVideoJoiningTimeMs: Long,
+        out: ArrayList<androidx.media3.exoplayer.Renderer>
+    ) {
+        android.util.Log.d("CustomAudioRenderersFactory", "Calling super.buildVideoRenderers with context: $context")
+        super.buildVideoRenderers(
+            context,
+            extensionRendererMode,
+            mediaCodecSelector,
+            enableDecoderFallback,
+            eventHandler,
+            eventListener,
+            allowedVideoJoiningTimeMs,
+            out,
+        )
+    }
 
     override fun buildAudioRenderers(
         context: Context,
@@ -54,5 +55,6 @@ class CustomAudioRenderersFactory(
                 audioBuffer
             )
         )
+//        super.buildAudioRenderers(context, extensionRendererMode, mediaCodecSelector, enableDecoderFallback, audioSink, eventHandler, eventListener, out)
     }
 }
