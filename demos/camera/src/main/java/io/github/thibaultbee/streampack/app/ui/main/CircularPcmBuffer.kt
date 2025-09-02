@@ -21,9 +21,6 @@ class CircularPcmBuffer(private val bufferSize: Int) {
         private const val TAG = "CircularPcmBuffer"
     }
 
-    /** Returns the number of bytes available to read. */
-    fun available(): Int = availableBytes
-
     /** Clears the buffer. */
     fun clear() {
         readPos = 0
@@ -31,7 +28,7 @@ class CircularPcmBuffer(private val bufferSize: Int) {
         availableBytes = 0
     }
 
-    private val fillThreshold = (bufferSize * 0.8).toInt() // 80% of the buffer size
+    private val fillThreshold = (bufferSize * 0.1).toInt() // 80% of the buffer size
     private var isFilling = true // Tracks whether the buffer is in the filling phase
 
     private var lastReadTime = 0L // Tracks the last time the read method was called
