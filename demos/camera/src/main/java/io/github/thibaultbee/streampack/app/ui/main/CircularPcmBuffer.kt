@@ -2,92 +2,80 @@ package io.github.thibaultbee.streampack.app.ui.main
 
 import java.nio.ByteBuffer
 import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Circular PCM buffer for audio streaming. Thread-safe for single producer/single consumer.
+ * A fixed-size, thread-safe circular buffer for audio frames.
+ *
+ * @param byteCapacity The maximum number of bytes the buffer can hold.
  */
-class CircularPcmBuffer(private val bufferSize: Int) {
-    private var readPos = 0
-    private var writePos = 0
-    private var availableBytes = 0
-
-    // Add a buffer pool to reuse ByteBuffer instances
-    private val bufferPool = ArrayBlockingQueue<ByteBuffer>(100)
+class CircularPcmBuffer(private val byteCapacity: Int) {
 
     // Define the AudioFrame data class
     private data class AudioFrame(val data: ByteBuffer, val timestamp: Long)
 
-    // Define the frameBuffer queue
-    private val frameBuffer = ArrayBlockingQueue<AudioFrame>(100)
+    // The ArrayBlockingQueue manages the frames themselves. Its capacity should be
+    // large enough to hold multiple frames, but the primary limit is the total byte size.
+    private val frameBuffer = ArrayBlockingQueue<AudioFrame>(50)
+    private val availableBytes = AtomicInteger(0)
 
-    val availableData: Int
-        get() = availableBytes
+    val available: Int
+        get() = availableBytes.get()
 
     val capacity: Int
-        get() = bufferSize
-
-    companion object {
-        private const val TAG = "CircularPcmBuffer"
-    }
+        get() = byteCapacity
 
     /** Clears the buffer. */
     fun clear() {
-        readPos = 0
-        writePos = 0
-        availableBytes = 0
+        frameBuffer.clear()
+        availableBytes.set(0)
     }
 
-    private fun getBuffer(size: Int): ByteBuffer {
-        return bufferPool.poll() ?: ByteBuffer.allocate(size)
-    }
-
-    private fun releaseBuffer(buffer: ByteBuffer) {
-        buffer.clear()
-        bufferPool.offer(buffer)
-    }
-
+    /**
+     * Writes an audio frame with its timestamp to the buffer.
+     * Returns true if the frame was successfully written, false if the buffer is full.
+     */
     fun writeFrame(data: ByteBuffer, timestamp: Long): Boolean {
-        // Check if there is enough space in the buffer
-        if (availableBytes + data.remaining() > bufferSize) {
+        // Check if there is enough space in the buffer based on total bytes
+        if (availableBytes.get() + data.remaining() > byteCapacity) {
             return false // Buffer is full
         }
 
-        // Reuse or allocate a new ByteBuffer
-        val copiedData = getBuffer(data.remaining())
+        // Create a new ByteBuffer to hold the copied data
+        val copiedData = ByteBuffer.allocate(data.remaining())
+
         val savedPosition = data.position()
         copiedData.put(data)
         data.position(savedPosition)
 
+        // CRITICAL: Flip the buffer to prepare it for reading.
+        copiedData.flip()
+
         val frame = AudioFrame(copiedData, timestamp)
 
-        // Add the copied data to the buffer
+        // Add the copied data to the buffer.
         val success = frameBuffer.offer(frame)
 
         if (success) {
-            availableBytes += data.remaining()
-        } else {
-            releaseBuffer(copiedData) // Release the buffer if not added
+            availableBytes.addAndGet(copiedData.limit())
         }
-
         return success
     }
 
+    /**
+     * Reads an audio frame with its timestamp from the buffer.
+     * Returns null if the buffer is empty.
+     */
     fun readFrame(): Pair<ByteBuffer, Long>? {
         val frame = frameBuffer.poll() // Thread-safe poll operation
 
-        return if (frame == null) {
-            null // Buffer is empty
-        } else {
-            val duplicateBuffer = frame.data.duplicate()
-            duplicateBuffer.rewind()
-            val remainingBytes = duplicateBuffer.remaining()
-
-            availableBytes -= remainingBytes
-
-            // Release the buffer back to the pool
-            releaseBuffer(frame.data)
-
-            Pair(frame.data, frame.timestamp)
+        if (frame == null) {
+            return null // Buffer is empty
         }
+
+        // Atomically subtract the frame's size from the available bytes counter.
+        availableBytes.addAndGet(-frame.data.limit())
+
+        return Pair(frame.data, frame.timestamp)
     }
 }
