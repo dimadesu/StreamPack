@@ -37,7 +37,7 @@ class CustomMedia3AudioRenderer(
            // Copy the buffer data to ensure it remains accessible
             if (buffer.remaining() > 0) {
 //                android.util.Log.w("CustomMedia3AudioRenderer", "buffer.remaining() ${buffer.remaining()}")
-                audioBuffer.writeFrame(buffer, bufferPresentationTimeUs)
+                audioBuffer.writeFrame(buffer, positionUs)
             } else {
 //                android.util.Log.w("CustomMedia3AudioRenderer", "Buffer is empty, skipping copy.")
             }
