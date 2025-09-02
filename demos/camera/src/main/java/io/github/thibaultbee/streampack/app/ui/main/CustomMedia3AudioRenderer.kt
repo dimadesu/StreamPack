@@ -41,7 +41,7 @@ class CustomMedia3AudioRenderer(
 
            // Offload the write operation to the background thread
            backgroundHandler.post {
-               audioBuffer.write(copiedBuffer)
+               audioBuffer.writeFrame(copiedBuffer, bufferPresentationTimeUs)
            }
        }
 

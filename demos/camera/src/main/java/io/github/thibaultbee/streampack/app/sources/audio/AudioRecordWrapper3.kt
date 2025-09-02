@@ -58,31 +58,19 @@ class AudioRecordWrapper3(
     }
 
     /**
-     * Reads audio data into the provided buffer.
+     * Reads audio data into the provided buffer and returns a Pair of bytes read and the timestamp.
      */
-    fun read(buffer: ByteBuffer, size: Int): Int {
-        val bytesRead = audioBuffer.read(buffer, size, CircularPcmBuffer.READ_NON_BLOCKING)
-
-        // Handle error codes
-        if (bytesRead < 0) {
-            when (bytesRead) {
-                CircularPcmBuffer.ERROR_INVALID_OPERATION -> {
-                    android.util.Log.e(TAG, "Audio buffer is not properly initialized.")
-                }
-                CircularPcmBuffer.ERROR_BAD_VALUE -> {
-                    android.util.Log.e(TAG, "Invalid parameters passed to audio buffer read.")
-                }
-                CircularPcmBuffer.ERROR_DEAD_OBJECT -> {
-                    android.util.Log.e(TAG, "Audio buffer is no longer valid.")
-                }
-                else -> {
-                    android.util.Log.e(TAG, "Unknown error occurred while reading audio buffer.")
-                }
-            }
-            return 0 // Return 0 bytes read in case of an error
+    fun read(buffer: ByteBuffer, size: Int): Pair<Int, Long?> {
+        val frame = audioBuffer.readFrame()
+        if (frame == null) {
+            return Pair(0, null) // Return 0 bytes read and null timestamp if the buffer is empty
         }
 
-        return bytesRead
+        val (data, timestamp) = frame
+        val bytesToRead = minOf(size, data.size)
+        buffer.put(data, 0, bytesToRead)
+
+        return Pair(bytesToRead, timestamp)
     }
 
     /**
