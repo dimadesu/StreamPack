@@ -99,11 +99,13 @@ class CircularPcmBuffer(private val bufferSize: Int) {
         val bytesToWrite = minOf(length, freeSpace)
         var bytesWritten = 0
 //        android.util.Log.i(TAG, "write-to-circular-buffer: requested=$length freeSpaceBefore=$freeSpace availableBefore=$availableBytes readPos=$readPos writePos=$writePos")
+        val savedPosition = src.position()
         while (bytesWritten < bytesToWrite) {
             playerBuffer[writePos] = src.get()
             writePos = (writePos + 1) % bufferSize
             bytesWritten++
         }
+        src.position(savedPosition)
         availableBytes += bytesWritten
 //        android.util.Log.d(TAG, "write-to-circular-buffer: bytesWritten=$bytesWritten availableAfter=$availableBytes readPos=$readPos writePos=$writePos")
         return bytesWritten

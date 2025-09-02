@@ -40,7 +40,6 @@ class CustomMedia3AudioRenderer(
 //               android.util.Log.w("CustomMedia3AudioRenderer", "positionUs $positionUs, bufferPresentationTimeUs $bufferPresentationTimeUs, elapsedRealtimeUs $elapsedRealtimeUs, sampleCount=$sampleCount, format $format")
                // TODO pass bufferPresentationTimeUs
                audioBuffer.write(buffer)
-               buffer.rewind()
            }
        }
 
