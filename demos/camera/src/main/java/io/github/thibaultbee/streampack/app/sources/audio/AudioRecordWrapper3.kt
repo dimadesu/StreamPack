@@ -60,25 +60,30 @@ class AudioRecordWrapper3(
     /**
      * Reads audio data into the provided buffer.
      */
-    fun read(rawFrame: RawFrame): Pair<Int, Long?> {
-        val buffer = rawFrame.rawBuffer
+    fun read(rawFrame: RawFrame): Int {
         val audioBuffer = this.audioBuffer ?: throw IllegalStateException("audioBuffer is not initialized. Call config() first.")
         // Read data from CircularPcmBuffer using readFrame
         val frame = audioBuffer.readFrame()
+        var bytesToRead = 0
         if (frame != null) {
             val (data, timestamp) = frame
-            val bytesToRead = minOf(buffer.remaining(), data.remaining())
+            bytesToRead = minOf(rawFrame.rawBuffer.remaining(), data.remaining())
             val tempArray = ByteArray(bytesToRead)
 
             // Read from the source buffer safely
             data.get(tempArray, 0, bytesToRead)
 
             // Write to the destination buffer safely
-            buffer.put(tempArray, 0, bytesToRead)
-
-            return Pair(bytesToRead, timestamp)
+            rawFrame.rawBuffer.put(tempArray, 0, bytesToRead)
         }
-        return Pair(0, null) // No data available
+        rawFrame.rawBuffer.flip()
+        rawFrame.timestampInUs = System.nanoTime() / 1000
+        // rawFrame.timestampInUs = timestamp ?: (System.nanoTime() / 1000)
+        // TODO figure out how to build correct timestamp
+//        if (bytesToRead > 0) {
+//            android.util.Log.d(TAG, "Audio bytes read: $bytesToRead, Timestamp: ${rawFrame.timestampInUs}")
+//        }
+        return bytesToRead
     }
 
     /**
