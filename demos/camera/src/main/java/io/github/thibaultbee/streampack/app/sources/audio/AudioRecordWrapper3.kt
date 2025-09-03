@@ -59,14 +59,21 @@ class AudioRecordWrapper3(
     /**
      * Reads audio data into the provided buffer.
      */
-    fun read(buffer: ByteBuffer, size: Int): Pair<Int, Long?> {
+    fun read(buffer: ByteBuffer): Pair<Int, Long?> {
         val audioBuffer = this.audioBuffer ?: throw IllegalStateException("audioBuffer is not initialized. Call config() first.")
         // Read data from CircularPcmBuffer using readFrame
         val frame = audioBuffer.readFrame()
         if (frame != null) {
             val (data, timestamp) = frame
-            val bytesToRead = minOf(size, data.remaining())
-            buffer.put(data.array(), data.arrayOffset(), bytesToRead)
+            val bytesToRead = minOf(buffer.remaining(), data.remaining())
+            val tempArray = ByteArray(bytesToRead)
+
+            // Read from the source buffer safely
+            data.get(tempArray, 0, bytesToRead)
+
+            // Write to the destination buffer safely
+            buffer.put(tempArray, 0, bytesToRead)
+
             return Pair(bytesToRead, timestamp)
         }
         return Pair(0, null) // No data available
