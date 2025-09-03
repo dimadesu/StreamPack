@@ -1,17 +1,10 @@
 package io.github.thibaultbee.streampack.app.sources.audio
 
-import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import androidx.media3.common.MediaItem
-import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import io.github.thibaultbee.streampack.app.ui.main.CircularPcmBuffer
 import io.github.thibaultbee.streampack.core.elements.data.RawFrame
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.nio.ByteBuffer
 
 class AudioRecordWrapper3(
     private val exoPlayer: ExoPlayer,
@@ -60,30 +53,22 @@ class AudioRecordWrapper3(
     /**
      * Reads audio data into the provided buffer.
      */
-    fun read(rawFrame: RawFrame): Int {
-        val audioBuffer = this.audioBuffer ?: throw IllegalStateException("audioBuffer is not initialized. Call config() first.")
-        // Read data from CircularPcmBuffer using readFrame
-        val frame = audioBuffer.readFrame()
-        var bytesToRead = 0
-        if (frame != null) {
-            val (data, timestamp) = frame
-            bytesToRead = minOf(rawFrame.rawBuffer.remaining(), data.remaining())
-            val tempArray = ByteArray(bytesToRead)
+    fun read(streamPackAudioFrame: RawFrame) {
+        val exoPlayerAudioFrame = audioBuffer.readFrame()
+        streamPackAudioFrame.timestampInUs = System.nanoTime() / 1000
 
-            // Read from the source buffer safely
-            data.get(tempArray, 0, bytesToRead)
+        if (exoPlayerAudioFrame != null) {
+            val (data, timestamp) = exoPlayerAudioFrame
 
-            // Write to the destination buffer safely
-            rawFrame.rawBuffer.put(tempArray, 0, bytesToRead)
+//            streamPackAudioFrame.rawBuffer.position(0)
+            streamPackAudioFrame.rawBuffer.put(data)
+//            streamPackAudioFrame.rawBuffer.limit(bytesToCopy)
+
+            // TODO Use the timestamp from the decoded frame
+//            streamPackAudioFrame.timestampInUs = timestamp
         }
-        rawFrame.rawBuffer.flip()
-        rawFrame.timestampInUs = System.nanoTime() / 1000
-        // rawFrame.timestampInUs = timestamp ?: (System.nanoTime() / 1000)
-        // TODO figure out how to build correct timestamp
-//        if (bytesToRead > 0) {
-//            android.util.Log.d(TAG, "Audio bytes read: $bytesToRead, Timestamp: ${rawFrame.timestampInUs}")
-//        }
-        return bytesToRead
+
+        streamPackAudioFrame.rawBuffer.flip()
     }
 
     /**
