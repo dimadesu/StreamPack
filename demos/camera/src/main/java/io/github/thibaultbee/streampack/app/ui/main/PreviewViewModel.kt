@@ -458,7 +458,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                                             it.channelConfig,
                                             it.byteFormat
                                         )
-                                        val pcmBuffer = CircularPcmBuffer(bufferSize * 64)
+                                        val pcmBuffer = CircularPcmBuffer(bufferSize * 256)
 
                                         val loadControl = DefaultLoadControl.Builder()
 //                                            .setTargetBufferBytes(bufferSize)

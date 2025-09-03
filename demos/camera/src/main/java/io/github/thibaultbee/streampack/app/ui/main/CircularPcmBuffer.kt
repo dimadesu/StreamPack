@@ -16,8 +16,10 @@ class CircularPcmBuffer(private val byteCapacity: Int) {
 
     // The ArrayBlockingQueue manages the frames themselves. Its capacity should be
     // large enough to hold multiple frames, but the primary limit is the total byte size.
-    private val frameBuffer = ArrayBlockingQueue<AudioFrame>(50)
+    private val frameBuffer = ArrayBlockingQueue<AudioFrame>(5000)
     private val availableBytes = AtomicInteger(0)
+
+    private var isFilling = true
 
     val available: Int
         get() = availableBytes.get()
@@ -64,12 +66,23 @@ class CircularPcmBuffer(private val byteCapacity: Int) {
 
     /**
      * Reads an audio frame with its timestamp from the buffer.
-     * Returns null if the buffer is empty.
+     * Automatically manages the `isFilling` state.
+     *
+     * @return A pair of ByteBuffer and timestamp if available, or null otherwise.
      */
     fun readFrame(): Pair<ByteBuffer, Long>? {
+        if (isFilling) {
+            if (isAtLeastFull(80)) {
+                isFilling = false // Switch to draining mode
+            } else {
+                return null // Still in filling mode
+            }
+        }
+
         val frame = frameBuffer.poll() // Thread-safe poll operation
 
         if (frame == null) {
+            isFilling = true // Switch back to filling mode when fully drained
             return null // Buffer is empty
         }
 
@@ -77,5 +90,16 @@ class CircularPcmBuffer(private val byteCapacity: Int) {
         availableBytes.addAndGet(-frame.data.limit())
 
         return Pair(frame.data, frame.timestamp)
+    }
+
+    /**
+     * Checks if the buffer is at least the specified percentage full.
+     *
+     * @param percentage The percentage to check (0-100).
+     * @return True if the buffer is at least the specified percentage full, false otherwise.
+     */
+    fun isAtLeastFull(percentage: Int): Boolean {
+        require(percentage in 0..100) { "Percentage must be between 0 and 100" }
+        return availableBytes.get() >= (byteCapacity * percentage / 100)
     }
 }
