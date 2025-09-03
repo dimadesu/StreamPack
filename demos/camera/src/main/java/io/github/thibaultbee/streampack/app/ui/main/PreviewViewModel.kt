@@ -17,11 +17,15 @@ package io.github.thibaultbee.streampack.app.ui.main
 
 import android.Manifest
 import android.app.Application
+import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.hardware.camera2.CaptureResult
 import android.media.AudioRecord
+import android.os.IBinder
 import android.util.Log
 import android.util.Range
 import android.util.Rational
@@ -41,6 +45,7 @@ import io.github.thibaultbee.streampack.app.BR
 import io.github.thibaultbee.streampack.app.R
 import io.github.thibaultbee.streampack.app.data.rotation.RotationRepository
 import io.github.thibaultbee.streampack.app.data.storage.DataStoreRepository
+import io.github.thibaultbee.streampack.app.services.ExoPlayerService
 import io.github.thibaultbee.streampack.app.sources.audio.AudioRecordWrapper3
 import io.github.thibaultbee.streampack.app.sources.audio.CustomAudioInput3
 import io.github.thibaultbee.streampack.app.ui.main.usecases.BuildStreamerUseCase
@@ -130,6 +135,28 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     val isTryingConnectionLiveData: LiveData<Boolean> = _isTryingConnectionLiveData
 
     var bufferVisualizerModel: BufferVisualizerModel? = null
+
+    private var exoPlayerService: ExoPlayerService? = null
+    private val serviceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            val binder = service as? ExoPlayerService.ExoPlayerBinder
+            exoPlayerService = binder?.getService()
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            exoPlayerService = null
+        }
+    }
+
+    init {
+        val serviceIntent = Intent(application, ExoPlayerService::class.java)
+        application.bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE)
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        application.unbindService(serviceConnection)
+    }
 
     init {
         viewModelScope.launch {
@@ -667,15 +694,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         showLensDistanceSlider.postValue(false)
         lensDistanceRange.postValue(settings.focus.availableLensDistanceRange)
         lensDistance = 0f
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        try {
-            streamer.releaseBlocking()
-        } catch (t: Throwable) {
-            Log.e(TAG, "Streamer release failed", t)
-        }
     }
 
     companion object {
