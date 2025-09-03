@@ -60,9 +60,7 @@ class AudioRecordWrapper3(
         if (exoPlayerAudioFrame != null) {
             val (data, timestamp) = exoPlayerAudioFrame
 
-//            streamPackAudioFrame.rawBuffer.position(0)
             streamPackAudioFrame.rawBuffer.put(data)
-//            streamPackAudioFrame.rawBuffer.limit(bytesToCopy)
 
             // TODO Use the timestamp from the decoded frame
 //            streamPackAudioFrame.timestampInUs = timestamp
