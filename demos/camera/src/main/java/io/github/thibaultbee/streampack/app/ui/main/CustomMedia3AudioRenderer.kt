@@ -14,44 +14,45 @@ class CustomMedia3AudioRenderer(
         context,
         mediaCodecSelector,
 ) {
-//    private val handlerThread = android.os.HandlerThread("AudioRendererThread").apply { start() }
-//    private val backgroundHandler = android.os.Handler(handlerThread.looper)
+   // Removed background handler; copy synchronously to avoid buffer reuse by codec
 
-    override fun processOutputBuffer(
-        positionUs: Long,
-        elapsedRealtimeUs: Long,
-        codecAdapter: MediaCodecAdapter?,
-        buffer: ByteBuffer?,
-        bufferIndex: Int,
-        bufferFlags: Int,
-        sampleCount: Int,
-        bufferPresentationTimeUs: Long,
-        isDecodeOnlyBuffer: Boolean,
-        isLastBuffer: Boolean,
-        format: Format
-    ): Boolean {
-        if (buffer != null && buffer.remaining() > 0) {
-//            backgroundHandler.post {
-                audioBuffer.writeFrame(buffer, bufferPresentationTimeUs)
-//            }
-        }
-        return super.processOutputBuffer(
-            positionUs,
-            elapsedRealtimeUs,
-            codecAdapter,
-            buffer,
-            bufferIndex,
-            bufferFlags,
-            sampleCount,
-            bufferPresentationTimeUs,
-            isDecodeOnlyBuffer,
-            isLastBuffer,
-            format
-        )
-   }
+   override fun processOutputBuffer(
+       positionUs: Long,
+       elapsedRealtimeUs: Long,
+       codecAdapter: MediaCodecAdapter?,
+       buffer: ByteBuffer?,
+       bufferIndex: Int,
+       bufferFlags: Int,
+       sampleCount: Int,
+       bufferPresentationTimeUs: Long,
+       isDecodeOnlyBuffer: Boolean,
+       isLastBuffer: Boolean,
+       format: Format
+   ): Boolean {
+       if (buffer != null && buffer.remaining() > 0) {
+           // Copy bytes synchronously before releasing the codec buffer
+           val pos = buffer.position()
+           val len = buffer.remaining()
+           val copy = ByteBuffer.allocate(len)
+           copy.put(buffer)
+           buffer.position(pos)
+           copy.flip()
+           audioBuffer.writeFrame(copy, bufferPresentationTimeUs)
+       }
 
-   override fun onRelease() {
-       super.onRelease()
-//       handlerThread.quitSafely()
+       // Continue normal rendering path (lets ExoPlayer release the buffer)
+       return super.processOutputBuffer(
+           positionUs,
+           elapsedRealtimeUs,
+           codecAdapter,
+           buffer,
+           bufferIndex,
+           bufferFlags,
+           sampleCount,
+           bufferPresentationTimeUs,
+           isDecodeOnlyBuffer,
+           isLastBuffer,
+           format
+       )
    }
 }
