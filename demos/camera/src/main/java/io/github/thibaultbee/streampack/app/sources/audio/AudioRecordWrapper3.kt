@@ -8,6 +8,7 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import io.github.thibaultbee.streampack.app.ui.main.CircularPcmBuffer
+import io.github.thibaultbee.streampack.core.elements.data.RawFrame
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.nio.ByteBuffer
@@ -59,7 +60,8 @@ class AudioRecordWrapper3(
     /**
      * Reads audio data into the provided buffer.
      */
-    fun read(buffer: ByteBuffer): Pair<Int, Long?> {
+    fun read(rawFrame: RawFrame): Pair<Int, Long?> {
+        val buffer = rawFrame.rawBuffer
         val audioBuffer = this.audioBuffer ?: throw IllegalStateException("audioBuffer is not initialized. Call config() first.")
         // Read data from CircularPcmBuffer using readFrame
         val frame = audioBuffer.readFrame()
