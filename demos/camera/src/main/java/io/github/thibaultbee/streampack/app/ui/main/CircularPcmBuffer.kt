@@ -71,24 +71,19 @@ class CircularPcmBuffer(private val byteCapacity: Int) {
         // Split the data into smaller chunks of 4096 bytes to match the MediaCodec buffer size.
         val chunkSize = 2048
 
-        // Create a copy of the input ByteBuffer to avoid modifying the original data
-        val dataCopy = ByteBuffer.allocate(data.remaining())
         val originalPosition = data.position()
-        dataCopy.put(data)
-        data.position(originalPosition)
-        dataCopy.flip()
 
         // Use the copied data for processing
-        while (dataCopy.remaining() > 0) {
-            val currentChunkSize = minOf(chunkSize, dataCopy.remaining())
+        while (data.remaining() > 0) {
+            val currentChunkSize = minOf(chunkSize, data.remaining())
             val chunk = ByteBuffer.allocate(currentChunkSize)
 
-            val savedPosition = dataCopy.position()
+            val savedPosition = data.position()
             val limit = savedPosition + currentChunkSize
-            dataCopy.limit(limit)
-            chunk.put(dataCopy)
-            dataCopy.limit(dataCopy.capacity())
-            dataCopy.position(savedPosition + currentChunkSize)
+            data.limit(limit)
+            chunk.put(data)
+            data.limit(data.capacity())
+            data.position(savedPosition + currentChunkSize)
 
             // CRITICAL: Flip the chunk to prepare it for reading.
             chunk.flip()
@@ -102,7 +97,7 @@ class CircularPcmBuffer(private val byteCapacity: Int) {
                 availableBytes.addAndGet(chunk.limit())
                 println("[CircularPcmBuffer] Chunk written. Chunk size: ${chunk.limit()}, Available bytes: ${availableBytes.get()}")
             } else {
-                println("[CircularPcmBuffer] Buffer is full. Remaining data size: ${dataCopy.remaining()}")
+                println("[CircularPcmBuffer] Buffer is full. Remaining data size: ${data.remaining()}")
                 break
             }
         }
