@@ -50,56 +50,9 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
     private val previewViewModel: PreviewViewModel by viewModels {
         PreviewViewModelFactory(requireActivity().application)
     }
-    private var rtmpPlayer: androidx.media3.exoplayer.ExoPlayer? = null
-    private var isRtmpPlaying = false
-
-    fun toggleRtmpStream() {
-        if (isRtmpPlaying) {
-            stopRtmpStream()
-        } else {
-            playRtmpStream()
-        }
-    }
-
-    private fun playRtmpStream() {
-        val rtmpUrl = "rtmp://localhost:1935/publish/live" // TODO: Replace with your RTMP URL
-        val playerView = binding.rtmpPlayerView
-        playerView.visibility = View.VISIBLE
-
-        rtmpPlayer?.release()
-        rtmpPlayer = ExoPlayer.Builder(requireContext()).build()
-        playerView.player = rtmpPlayer
-
-        val mediaItem = MediaItem.fromUri(rtmpUrl)
-        val mediaSource = ProgressiveMediaSource.Factory(
-            try {
-                androidx.media3.datasource.rtmp.RtmpDataSource.Factory()
-            } catch (e: Exception) {
-                androidx.media3.datasource.DefaultDataSource.Factory(requireContext())
-            }
-        ).createMediaSource(mediaItem)
-
-        rtmpPlayer?.setMediaSource(mediaSource)
-        rtmpPlayer?.prepare()
-        rtmpPlayer?.playWhenReady = true
-
-        binding.playRtmpButton.text = "Stop RTMP"
-        isRtmpPlaying = true
-    }
-
-    private fun stopRtmpStream() {
-        rtmpPlayer?.release()
-        rtmpPlayer = null
-        binding.rtmpPlayerView.player = null
-        binding.rtmpPlayerView.visibility = View.GONE
-        binding.playRtmpButton.text = "Play RTMP"
-        isRtmpPlaying = false
-    }
 
     override fun onDestroyView() {
         super.onDestroyView()
-        rtmpPlayer?.release()
-        rtmpPlayer = null
     }
 
     override fun onCreateView(
@@ -125,10 +78,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                     stopStream()
                 }
             }
-        }
-
-        binding.playRtmpButton.setOnClickListener {
-            toggleRtmpStream()
         }
 
         binding.switchSourceButton.setOnClickListener {
