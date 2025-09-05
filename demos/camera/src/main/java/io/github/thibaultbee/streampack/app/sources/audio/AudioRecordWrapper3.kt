@@ -2,6 +2,7 @@ package io.github.thibaultbee.streampack.app.sources.audio
 
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.media3.exoplayer.ExoPlayer
 import io.github.thibaultbee.streampack.app.ui.main.CircularPcmBuffer
 import io.github.thibaultbee.streampack.core.elements.data.RawFrame
@@ -54,7 +55,7 @@ class AudioRecordWrapper3(
      * Reads audio data into the provided buffer.
      */
     fun read(streamPackAudioFrame: RawFrame) {
-        val exoPlayerAudioFrame = audioBuffer.readFrame()
+        val exoPlayerAudioFrame = audioBuffer.readFrame(streamPackAudioFrame.rawBuffer.remaining())
         streamPackAudioFrame.timestampInUs = System.nanoTime() / 1000
 
         if (exoPlayerAudioFrame != null) {

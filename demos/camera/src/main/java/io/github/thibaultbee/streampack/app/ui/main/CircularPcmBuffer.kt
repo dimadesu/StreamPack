@@ -30,6 +30,9 @@ class CircularPcmBuffer(private val byteCapacity: Int) {
     // A state variable to manage the "filling" vs. "draining" state of the buffer.
     private var isFilling = true
 
+    // If a consumer only reads part of a queued chunk, keep the remainder here for next read.
+    private var pendingFrame: AudioFrame? = null
+
     /**
      * Gets the number of bytes currently available in the buffer.
      */
@@ -63,47 +66,20 @@ class CircularPcmBuffer(private val byteCapacity: Int) {
      * @param timestamp The presentation timestamp for this frame in microseconds.
      * @return `true` if the frame was successfully written, `false` if the buffer is full.
      */
-    fun writeFrame(data: ByteBuffer, timestamp: Long): Boolean {
-        // Calculate the total size of the data to be written.
+    fun writeFrame(data: ByteBuffer, timestamp: Long) {
         val totalSize = data.remaining()
         println("[CircularPcmBuffer] Attempting to write frame. Total data size: $totalSize, Timestamp: $timestamp")
 
-        // Split the data into smaller chunks of 4096 bytes to match the MediaCodec buffer size.
-        val chunkSize = 2048
+        val frame = AudioFrame(data, timestamp)
 
-        val originalPosition = data.position()
+        val success = frameBuffer.offer(frame)
 
-        // Use the copied data for processing
-        while (data.remaining() > 0) {
-            val currentChunkSize = minOf(chunkSize, data.remaining())
-            val chunk = ByteBuffer.allocate(currentChunkSize)
-
-            val savedPosition = data.position()
-            val limit = savedPosition + currentChunkSize
-            data.limit(limit)
-            chunk.put(data)
-            data.limit(data.capacity())
-            data.position(savedPosition + currentChunkSize)
-
-            // CRITICAL: Flip the chunk to prepare it for reading.
-            chunk.flip()
-
-            val frame = AudioFrame(chunk, timestamp)
-
-            // Add the chunk to the buffer.
-            val success = frameBuffer.offer(frame)
-
-            if (success) {
-                availableBytes.addAndGet(chunk.limit())
-                println("[CircularPcmBuffer] Chunk written. Chunk size: ${chunk.limit()}, Available bytes: ${availableBytes.get()}")
-            } else {
-                println("[CircularPcmBuffer] Buffer is full. Remaining data size: ${data.remaining()}")
-                break
-            }
+        if (success) {
+            availableBytes.addAndGet(data.limit())
+            println("[CircularPcmBuffer] Chunk written. Chunk size: ${data.limit()}, Available bytes: ${availableBytes.get()}")
+        } else {
+            println("[CircularPcmBuffer] Buffer is full. Remaining data size: ${data.remaining()}")
         }
-
-        data.position(originalPosition)
-        return true
     }
 
     /**
@@ -114,7 +90,7 @@ class CircularPcmBuffer(private val byteCapacity: Int) {
      *
      * @return A `Pair` of `ByteBuffer` and timestamp if a frame is available, or `null` otherwise.
      */
-    fun readFrame(): Pair<ByteBuffer, Long>? {
+    fun readFrame(size: Int): Pair<ByteBuffer, Long>? {
         // The `isFilling` state prevents premature reading.
         if (isFilling) {
             // Check if the buffer has reached the minimum fill level to start draining.
@@ -127,21 +103,55 @@ class CircularPcmBuffer(private val byteCapacity: Int) {
             }
         }
 
-        // Poll the frame from the queue. `poll` is a non-blocking, thread-safe operation.
-        val frame = frameBuffer.poll()
 
-        if (frame == null) {
+        val currentFrame = pendingFrame ?: frameBuffer.poll()
+        if (currentFrame == null) {
             // If the buffer is empty, switch back to the filling state.
             isFilling = true
             println("[CircularPcmBuffer] Buffer drained. Switching back to filling mode.")
             return null // Buffer is empty.
         }
 
-        // Atomically subtract the size of the read frame from the total byte count.
-        availableBytes.addAndGet(-frame.data.remaining())
-        println("[CircularPcmBuffer] Frame read. Frame size: ${frame.data.remaining()}, Available bytes: ${availableBytes.get()}")
+        pendingFrame = currentFrame
 
-        return Pair(frame.data, frame.timestamp)
+        val availableInChunk = currentFrame.data.remaining()
+
+//        println("[CircularPcmBuffer] Frame read. hello1")
+        val toRead = minOf(availableInChunk, size)
+
+        println("[CircularPcmBuffer] Frame read. toRead $toRead")
+
+        // The destination buffer is correctly sized.
+        val out = ByteBuffer.allocate(toRead)
+
+//        println("[CircularPcmBuffer] Frame read. hello3")
+
+        // Create a temporary view of the source buffer to control the data transfer.
+        val sourceView = currentFrame.data.duplicate()
+
+//        println("[CircularPcmBuffer] Frame read. hello4")
+
+        sourceView.limit(sourceView.position() + toRead)
+
+//        println("[CircularPcmBuffer] Frame read. hello5")
+
+        // Put from the temporary view into our output buffer. This is the key step.
+        out.put(sourceView)
+        out.flip()
+
+        // Now, manually advance the position of the original currentFrame.data
+        // by the amount we just read. This is crucial for subsequent reads.
+        currentFrame.data.position(currentFrame.data.position() + toRead)
+
+        if (!currentFrame.data.hasRemaining()) {
+            pendingFrame = null
+        }
+
+        // Subtract only the number of bytes actually consumed.
+        availableBytes.addAndGet(-toRead)
+        println("[CircularPcmBuffer] Frame read. Bytes read: $toRead, Available bytes: ${availableBytes.get()}")
+
+        return Pair(out, currentFrame.timestamp)
     }
 
     /**
