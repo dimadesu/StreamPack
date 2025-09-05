@@ -136,26 +136,26 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     var bufferVisualizerModel: BufferVisualizerModel? = null
 
-    private var exoPlayerService: ExoPlayerService? = null
-    private val serviceConnection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            val binder = service as? ExoPlayerService.ExoPlayerBinder
-            exoPlayerService = binder?.getService()
-        }
-
-        override fun onServiceDisconnected(name: ComponentName?) {
-            exoPlayerService = null
-        }
-    }
-
-    init {
-        val serviceIntent = Intent(application, ExoPlayerService::class.java)
-        application.bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE)
-    }
+//    private var exoPlayerService: ExoPlayerService? = null
+//    private val serviceConnection = object : ServiceConnection {
+//        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+//            val binder = service as? ExoPlayerService.ExoPlayerBinder
+//            exoPlayerService = binder?.getService()
+//        }
+//
+//        override fun onServiceDisconnected(name: ComponentName?) {
+//            exoPlayerService = null
+//        }
+//    }
+//
+//    init {
+//        val serviceIntent = Intent(application, ExoPlayerService::class.java)
+//        application.bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE)
+//    }
 
     override fun onCleared() {
         super.onCleared()
-        application.unbindService(serviceConnection)
+//        application.unbindService(serviceConnection)
     }
 
     init {
