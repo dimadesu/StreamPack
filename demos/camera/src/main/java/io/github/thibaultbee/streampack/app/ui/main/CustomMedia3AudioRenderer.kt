@@ -1,5 +1,6 @@
 package io.github.thibaultbee.streampack.app.ui.main
 
+import android.util.Log
 import androidx.media3.common.Format
 import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
 import androidx.media3.exoplayer.mediacodec.MediaCodecAdapter
@@ -29,19 +30,28 @@ class CustomMedia3AudioRenderer(
        isLastBuffer: Boolean,
        format: Format
    ): Boolean {
-       if (buffer != null && buffer.remaining() > 0) {
+       var copy = ByteBuffer.allocate(0)
+       var originalPosition = 0
+
+       if (buffer != null) {
+
            // Copy bytes synchronously before releasing the codec buffer
-           val pos = buffer.position()
-           val len = buffer.remaining()
-           val copy = ByteBuffer.allocate(len)
-           copy.put(buffer)
-           buffer.position(pos)
-           copy.flip()
-           audioBuffer.writeFrame(copy, bufferPresentationTimeUs)
+           originalPosition = buffer.position()
+//       val len = buffer.remaining()
+//       val copy = ByteBuffer.allocate(len)
+//       copy.put(buffer)
+//       buffer.position(originalPosition)
+//       copy.flip()
+
+           copy = buffer.asReadOnlyBuffer()
+           copy.position(originalPosition)
+//       copy.limit(buffer.limit())
+
+//           Log.i("XXX", "before buffer.position ${buffer.position()}, buffer.limit ${buffer.limit()}, buffer.remaining ${buffer.remaining()}. copy position ${copy.position()}, copy limit ${copy.limit()}, copy remaining ${copy.remaining()}")
        }
 
        // Continue normal rendering path (lets ExoPlayer release the buffer)
-       return super.processOutputBuffer(
+       val isFullyProcessed =  super.processOutputBuffer(
            positionUs,
            elapsedRealtimeUs,
            codecAdapter,
@@ -54,5 +64,28 @@ class CustomMedia3AudioRenderer(
            isLastBuffer,
            format
        )
+
+       if (buffer != null) {
+
+           val bytesRead = buffer.position() - originalPosition
+
+           Log.i("XXX", "writing bytes $bytesRead")
+
+//           Log.i("XXX", "after buffer.position ${buffer.position()}, buffer.limit ${buffer.limit()}, buffer.remaining ${buffer.remaining()}. copy position ${copy.position()}, copy limit ${copy.limit()}, copy remaining ${copy.remaining()}, isFullyProcessed $isFullyProcessed")
+
+           if (!isFullyProcessed) {
+
+               if (bytesRead > 0) {
+                   copy.limit(originalPosition + bytesRead)
+//                   Log.i("XXX", "after2 buffer.position ${buffer.position()}, buffer.limit ${buffer.limit()}, buffer.remaining ${buffer.remaining()}. copy position ${copy.position()}, copy limit ${copy.limit()}, copy remaining ${copy.remaining()}")
+                   audioBuffer.writeFrame(copy, bufferPresentationTimeUs)
+               }
+
+           } else {
+               audioBuffer.writeFrame(copy, bufferPresentationTimeUs)
+           }
+       }
+
+       return isFullyProcessed
    }
 }
