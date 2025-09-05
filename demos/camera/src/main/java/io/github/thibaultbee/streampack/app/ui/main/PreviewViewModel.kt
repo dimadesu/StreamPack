@@ -45,7 +45,6 @@ import io.github.thibaultbee.streampack.app.BR
 import io.github.thibaultbee.streampack.app.R
 import io.github.thibaultbee.streampack.app.data.rotation.RotationRepository
 import io.github.thibaultbee.streampack.app.data.storage.DataStoreRepository
-import io.github.thibaultbee.streampack.app.services.ExoPlayerService
 import io.github.thibaultbee.streampack.app.sources.audio.AudioRecordWrapper3
 import io.github.thibaultbee.streampack.app.sources.audio.CustomAudioInput3
 import io.github.thibaultbee.streampack.app.ui.main.usecases.BuildStreamerUseCase
