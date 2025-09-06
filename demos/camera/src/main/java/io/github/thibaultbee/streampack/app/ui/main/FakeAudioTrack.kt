@@ -30,6 +30,10 @@ class FakeAudioTrack(
     
     private val TAG = "FakeAudioTrack"
     
+    init {
+        Log.i(TAG, "FakeAudioTrack created! SampleRate: ${audioFormat.sampleRate}, Channels: ${audioFormat.channelCount}, BufferSize: $bufferSizeInBytes")
+    }
+    
     // Create a real AudioTrack to handle actual playback and maintain A/V sync
     private val realAudioTrack = AudioTrack(
         audioAttributes,
@@ -55,6 +59,11 @@ class FakeAudioTrack(
     // Position tracking for timestamp estimation (used by writeInternal methods)
     private val writtenFrames = AtomicLong(0L)
     
+    // Consistent timestamp base - initialized when first write occurs
+    private var timestampBaseUs: Long = 0L
+    private var firstWriteTime: Long = 0L
+    private val timestampLock = Any()
+    
     init {
         Log.i(TAG, "FakeAudioTrack created: sampleRate=$sampleRate, channels=$channelCount, bytesPerFrame=$bytesPerFrame")
         // Update CircularPcmBuffer with the actual format detected by ExoPlayer
@@ -63,21 +72,31 @@ class FakeAudioTrack(
     }
     
     override fun write(audioData: ByteArray, offsetInBytes: Int, sizeInBytes: Int): Int {
+        val framesToWrite = sizeInBytes / bytesPerFrame
+        val newFrameCount = writtenFrames.addAndGet(framesToWrite.toLong())
+        val presentationTimeUs = generateMonotonicTimestampUs(newFrameCount)
+        
         // Copy to our buffer first
-        writeInternal(audioData, offsetInBytes, sizeInBytes, null)
+        writeInternal(audioData, offsetInBytes, sizeInBytes, presentationTimeUs)
         // Then forward to real AudioTrack for proper playback
         return realAudioTrack.write(audioData, offsetInBytes, sizeInBytes)
     }
     
     override fun write(audioData: ByteArray, offsetInBytes: Int, sizeInBytes: Int, writeMode: Int): Int {
+        val framesToWrite = sizeInBytes / bytesPerFrame
+        val newFrameCount = writtenFrames.addAndGet(framesToWrite.toLong())
+        val presentationTimeUs = generateMonotonicTimestampUs(newFrameCount)
+        
         // Copy to our buffer first
-        writeInternal(audioData, offsetInBytes, sizeInBytes, null)
+        writeInternal(audioData, offsetInBytes, sizeInBytes, presentationTimeUs)
         // Then forward to real AudioTrack
         return realAudioTrack.write(audioData, offsetInBytes, sizeInBytes, writeMode)
     }
     
     override fun write(audioData: ByteBuffer, sizeInBytes: Int, writeMode: Int): Int {
-        val presentationTimeUs = System.nanoTime() / 1000L
+        val framesToWrite = sizeInBytes / bytesPerFrame
+        val newFrameCount = writtenFrames.addAndGet(framesToWrite.toLong())
+        val presentationTimeUs = generateMonotonicTimestampUs(newFrameCount)
         
         // Create a copy for our buffer since writeInternal will consume the data
         val originalPosition = audioData.position()
@@ -93,7 +112,10 @@ class FakeAudioTrack(
     
     @RequiresApi(Build.VERSION_CODES.M)
     override fun write(audioData: ByteBuffer, sizeInBytes: Int, writeMode: Int, timestamp: Long): Int {
-        val presentationTimeUs = timestamp / 1000L
+        val framesToWrite = sizeInBytes / bytesPerFrame
+        val newFrameCount = writtenFrames.addAndGet(framesToWrite.toLong())
+        // Use monotonic timestamp instead of provided timestamp for consistency
+        val presentationTimeUs = generateMonotonicTimestampUs(newFrameCount)
         
         // Create a copy for our buffer since writeInternal will consume the data
         val originalPosition = audioData.position()
@@ -107,29 +129,27 @@ class FakeAudioTrack(
         return realAudioTrack.write(audioData, sizeInBytes, writeMode, timestamp)
     }
     
-    private fun writeInternal(audioData: ByteArray, offsetInBytes: Int, sizeInBytes: Int, timestamp: Long?): Int {
+    private fun writeInternal(audioData: ByteArray, offsetInBytes: Int, sizeInBytes: Int, timestamp: Long): Int {
         if (sizeInBytes <= 0) return 0
         
         try {
-            // Copy array data to ByteBuffer for CircularPcmBuffer
-            val buffer = ByteBuffer.allocate(sizeInBytes)
-            buffer.put(audioData, offsetInBytes, sizeInBytes)
-            buffer.flip()
+            // Optimize: Use wrap instead of allocate + put for better performance
+            val buffer = ByteBuffer.wrap(audioData, offsetInBytes, sizeInBytes)
             
-            val presentationTimeUs = timestamp ?: estimateTimestampUs()
-            
-            // Compute CRC32 for diagnostics
-            val crc = CRC32()
-            crc.update(audioData, offsetInBytes, sizeInBytes)
+            // Compute CRC32 for diagnostics (reduce frequency to lower overhead)
+            val crc = if (sizeInBytes % 1024 == 0) { // Only log every ~1024 bytes
+                val c = CRC32()
+                c.update(audioData, offsetInBytes, sizeInBytes)
+                c
+            } else null
             
             // Write to circular buffer
-            val seq = audioBuffer.writeFrame(buffer, presentationTimeUs)
+            audioBuffer.writeFrame(buffer, timestamp)
             
-            Log.v(TAG, "FAKE-TRACK-WRITE: size=$sizeInBytes timestampUs=$presentationTimeUs seq=$seq crc=0x${java.lang.Long.toHexString(crc.value)}")
-            
-            // Update position tracking
-            val frames = sizeInBytes / bytesPerFrame
-            writtenFrames.addAndGet(frames.toLong())
+            // Reduce logging overhead
+            if (crc != null) {
+                Log.v(TAG, "FAKE-TRACK-WRITE: size=$sizeInBytes timestampUs=$timestamp crc=0x${java.lang.Long.toHexString(crc.value)}")
+            }
             
             return sizeInBytes
         } catch (e: Exception) {
@@ -142,31 +162,34 @@ class FakeAudioTrack(
         if (sizeInBytes <= 0) return 0
         
         try {
-            // Copy ByteBuffer data
+            // Optimize: Use slice instead of allocate + put for better performance
             val originalPosition = audioData.position()
-            val copyBuffer = ByteBuffer.allocate(sizeInBytes)
-            val limitedBuffer = audioData.duplicate()
-            limitedBuffer.limit(originalPosition + sizeInBytes)
-            copyBuffer.put(limitedBuffer)
-            copyBuffer.flip()
+            val originalLimit = audioData.limit()
             
-            // Restore original position
+            // Create a slice that represents exactly the data we want
+            audioData.limit(originalPosition + sizeInBytes)
+            val sliceBuffer = audioData.slice()
+            
+            // Restore original buffer state
+            audioData.limit(originalLimit)
             audioData.position(originalPosition + sizeInBytes)
             
-            // Compute CRC32 for diagnostics
-            val bytes = ByteArray(sizeInBytes)
-            copyBuffer.duplicate().get(bytes)
-            val crc = CRC32()
-            crc.update(bytes)
+            // Reduce CRC32 computation frequency for performance
+            val crc = if (sizeInBytes % 2048 == 0) { // Only compute every ~2KB
+                val bytes = ByteArray(sizeInBytes)
+                sliceBuffer.duplicate().get(bytes)
+                val c = CRC32()
+                c.update(bytes)
+                c
+            } else null
             
-            // Write to circular buffer
-            val seq = audioBuffer.writeFrame(copyBuffer, presentationTimeUs)
+            // Write to circular buffer using the slice directly
+            audioBuffer.writeFrame(sliceBuffer, presentationTimeUs)
             
-            Log.v(TAG, "FAKE-TRACK-WRITE-BB: size=$sizeInBytes timestampUs=$presentationTimeUs seq=$seq crc=0x${java.lang.Long.toHexString(crc.value)}")
-            
-            // Update position tracking
-            val frames = sizeInBytes / bytesPerFrame
-            writtenFrames.addAndGet(frames.toLong())
+            // Reduce logging overhead
+            if (crc != null) {
+                Log.v(TAG, "FAKE-TRACK-WRITE-BB: size=$sizeInBytes timestampUs=$presentationTimeUs crc=0x${java.lang.Long.toHexString(crc.value)}")
+            }
             
             return sizeInBytes
         } catch (e: Exception) {
@@ -176,9 +199,34 @@ class FakeAudioTrack(
     }
     
     private fun estimateTimestampUs(): Long {
-        // Estimate based on written frames and sample rate
+        // Use consistent audio timeline based on frames written
         val writtenFrameCount = writtenFrames.get()
         return (writtenFrameCount * 1_000_000L) / sampleRate.toLong()
+    }
+    
+    /**
+     * Generate monotonically increasing timestamps based on audio timeline
+     * Starting from a small positive value for SRT compatibility
+     */
+    private fun generateMonotonicTimestampUs(frameCount: Long): Long {
+        synchronized(timestampLock) {
+            if (firstWriteTime == 0L) {
+                firstWriteTime = System.nanoTime() / 1000L
+                timestampBaseUs = 1000L  // Start timestamps from 1ms for SRT compatibility
+                Log.i(TAG, "Initializing monotonic timestamps - starting from ${timestampBaseUs}µs")
+            }
+            
+            // Calculate timestamp based on audio timeline (frames * duration per frame)
+            // This ensures monotonic progression starting from timestampBaseUs
+            val timestampUs = timestampBaseUs + (frameCount * 1_000_000L) / sampleRate.toLong()
+            
+            // Log first few timestamps to verify they're reasonable
+            if (frameCount <= 5) {
+                Log.i(TAG, "Timestamp: frameCount=$frameCount -> $timestampUs µs")
+            }
+            
+            return timestampUs
+        }
     }
     
     override fun play() {
