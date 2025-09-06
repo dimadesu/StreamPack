@@ -56,15 +56,14 @@ class AudioRecordWrapper3(
      */
     fun read(streamPackAudioFrame: RawFrame) {
         val exoPlayerAudioFrame = audioBuffer.readFrame(streamPackAudioFrame.rawBuffer.remaining())
-        streamPackAudioFrame.timestampInUs = System.nanoTime() / 1000
+//        streamPackAudioFrame.timestampInUs = System.nanoTime() / 1000
 
         if (exoPlayerAudioFrame != null) {
             val (data, timestamp) = exoPlayerAudioFrame
 
             streamPackAudioFrame.rawBuffer.put(data)
 
-            // TODO Use the timestamp from the decoded frame
-//            streamPackAudioFrame.timestampInUs = timestamp
+            streamPackAudioFrame.timestampInUs = timestamp
         }
 
         streamPackAudioFrame.rawBuffer.flip()

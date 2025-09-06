@@ -15,6 +15,11 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 class CircularPcmBuffer(private val byteCapacity: Int) {
 
+    // Audio format tracking - updated when format is determined
+    private var sampleRateInternal: Int = 48000
+    private var channelCountInternal: Int = 2  
+    private var bytesPerSampleInternal: Int = 2
+    
     // A data class to hold the audio frame's ByteBuffer and its presentation timestamp.
     private data class AudioFrame(val data: ByteBuffer, val timestamp: Long)
 
@@ -44,6 +49,17 @@ class CircularPcmBuffer(private val byteCapacity: Int) {
      */
     val capacity: Int
         get() = byteCapacity
+
+    /**
+     * Updates the audio format parameters. Called when the actual format is determined
+     * from ExoPlayer's audio sink configuration.
+     */
+    fun updateFormat(sampleRate: Int, channelCount: Int, bytesPerSample: Int) {
+        this.sampleRateInternal = sampleRate
+        this.channelCountInternal = channelCount
+        this.bytesPerSampleInternal = bytesPerSample
+        android.util.Log.d("CircularPcmBuffer", "Format updated: sampleRate=$sampleRate, channelCount=$channelCount, bytesPerSample=$bytesPerSample")
+    }
 
     /**
      * Clears the buffer, removing all frames and resetting the available byte count.
