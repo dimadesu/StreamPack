@@ -366,6 +366,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                                         )
                                         val pcmBuffer = CircularPcmBuffer(bufferSize * 2)
 
+                                        // Single ExoPlayer instance with pass-through FakeAudioTrack for both A/V
                                         val renderersFactory = CustomAudioRenderersFactory(application, pcmBuffer)
                                         val exoPlayerInstance = ExoPlayer
                                             .Builder(
@@ -378,6 +379,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                                         val mediaSource = ProgressiveMediaSource.Factory(
                                             DefaultDataSource.Factory(application)
                                         ).createMediaSource(mediaItem)
+                                        
                                         exoPlayerInstance.setMediaSource(mediaSource)
                                         exoPlayerInstance.volume = 0f
 

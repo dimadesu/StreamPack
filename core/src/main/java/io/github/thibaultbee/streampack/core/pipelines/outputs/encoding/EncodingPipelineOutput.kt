@@ -5,7 +5,14 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * ht        override fun onOutputFrame(frame: Frame) {
+            Logger.d(TAG, "Final AUDIO frame for StreamPack: timestamp=${frame.ptsInUs}µs, size=${frame.rawBuffer.remaining()}")
+            audioStreamId?.let {
+                runBlocking {
+                    this@EncodingPipelineOutput.endpointInternal.write(frame, it)
+                }
+            } ?: Logger.w(TAG, "Audio frame received but audio stream is not set")
+        }.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -225,6 +232,7 @@ internal class EncodingPipelineOutput(
         }
 
         override fun onOutputFrame(frame: Frame) {
+            Logger.i("StreamPackTimestamps", "Final AUDIO frame for StreamPack: timestamp=${frame.ptsInUs}µs, size=${frame.rawBuffer.remaining()}")
             audioStreamId?.let {
                 runBlocking {
                     this@EncodingPipelineOutput.endpointInternal.write(frame, it)
@@ -239,6 +247,7 @@ internal class EncodingPipelineOutput(
         }
 
         override fun onOutputFrame(frame: Frame) {
+            Logger.i("StreamPackTimestamps", "Final VIDEO frame for StreamPack: timestamp=${frame.ptsInUs}µs, size=${frame.rawBuffer.remaining()}")
             videoStreamId?.let {
                 runBlocking {
                     this@EncodingPipelineOutput.endpointInternal.write(frame, it)
@@ -270,7 +279,7 @@ internal class EncodingPipelineOutput(
     override fun queueAudioFrame(frame: RawFrame) {
         val encoder = requireNotNull(audioEncoderInternal) { "Audio is not configured" }
         val input = encoder.input as IEncoderInternal.ISyncByteBufferInput
-        Logger.d(TAG, "Queueing audio frame with timestamp: ${frame.timestampInUs} and size: ${frame.rawBuffer.remaining()}")
+        Logger.d(TAG, "Input AUDIO frame to StreamPack: timestamp=${frame.timestampInUs}µs, size=${frame.rawBuffer.remaining()}")
         input.queueInputFrame(frame)
     }
 

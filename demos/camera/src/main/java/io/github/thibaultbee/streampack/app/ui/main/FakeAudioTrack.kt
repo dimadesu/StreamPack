@@ -15,10 +15,9 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.zip.CRC32
 
 /**
- * A fake AudioTrack implementation that intercepts all write() calls and forwards
- * PCM data to CircularPcmBuffer instead of playing audio. This allows capturing
- * the exact same data ExoPlayer's DefaultAudioSink would send to the platform
- * AudioTrack, with precise timestamps.
+ * A pass-through AudioTrack wrapper that intercepts all write() calls to copy
+ * PCM data to CircularPcmBuffer while still forwarding all operations to a real
+ * AudioTrack. This preserves ExoPlayer's A/V synchronization while capturing audio data.
  */
 class FakeAudioTrack(
     private val audioBuffer: CircularPcmBuffer,
@@ -31,16 +30,16 @@ class FakeAudioTrack(
     
     private val TAG = "FakeAudioTrack"
     
-    // Track state
-    @Volatile private var playState = PLAYSTATE_STOPPED
-    @Volatile private var volume = 1.0f
+    // Create a real AudioTrack to handle actual playback and maintain A/V sync
+    private val realAudioTrack = AudioTrack(
+        audioAttributes,
+        audioFormat,
+        bufferSizeInBytes,
+        mode,
+        sessionId
+    )
     
-    // Position tracking for getCurrentPositionUs calculations
-    private val writtenFrames = AtomicLong(0L)
-    private var startTimeNanos = 0L
-    private var pauseTimeNanos = 0L
-    
-    // Audio format info
+    // Audio format info for CircularPcmBuffer
     private val sampleRate = audioFormat.sampleRate
     private val channelCount = audioFormat.channelCount
     private val bytesPerSample = when (audioFormat.encoding) {
@@ -53,30 +52,58 @@ class FakeAudioTrack(
     }
     private val bytesPerFrame = channelCount * bytesPerSample
     
+    // Position tracking for timestamp estimation (used by writeInternal methods)
+    private val writtenFrames = AtomicLong(0L)
+    
     init {
-        Log.d(TAG, "FakeAudioTrack created: sampleRate=$sampleRate, channels=$channelCount, bytesPerFrame=$bytesPerFrame")
+        Log.d(TAG, "PassThrough FakeAudioTrack created: sampleRate=$sampleRate, channels=$channelCount, bytesPerFrame=$bytesPerFrame")
         // Update CircularPcmBuffer with the actual format
         audioBuffer.updateFormat(sampleRate, channelCount, bytesPerSample)
     }
     
     override fun write(audioData: ByteArray, offsetInBytes: Int, sizeInBytes: Int): Int {
-        return writeInternal(audioData, offsetInBytes, sizeInBytes, null)
+        // Copy to our buffer first
+        writeInternal(audioData, offsetInBytes, sizeInBytes, null)
+        // Then forward to real AudioTrack for proper playback
+        return realAudioTrack.write(audioData, offsetInBytes, sizeInBytes)
     }
     
     override fun write(audioData: ByteArray, offsetInBytes: Int, sizeInBytes: Int, writeMode: Int): Int {
-        return writeInternal(audioData, offsetInBytes, sizeInBytes, null)
+        // Copy to our buffer first
+        writeInternal(audioData, offsetInBytes, sizeInBytes, null)
+        // Then forward to real AudioTrack
+        return realAudioTrack.write(audioData, offsetInBytes, sizeInBytes, writeMode)
     }
     
     override fun write(audioData: ByteBuffer, sizeInBytes: Int, writeMode: Int): Int {
-        val presentationTimeUs = System.nanoTime() / 1000L // Convert to microseconds
-        return writeInternal(audioData, sizeInBytes, presentationTimeUs)
+        val presentationTimeUs = System.nanoTime() / 1000L
+        
+        // Create a copy for our buffer since writeInternal will consume the data
+        val originalPosition = audioData.position()
+        val copyForOurBuffer = audioData.duplicate()
+        copyForOurBuffer.limit(originalPosition + sizeInBytes)
+        
+        // Copy to our buffer first
+        writeInternal(copyForOurBuffer, sizeInBytes, presentationTimeUs)
+        
+        // Forward to real AudioTrack (audioData position unchanged)
+        return realAudioTrack.write(audioData, sizeInBytes, writeMode)
     }
     
     @RequiresApi(Build.VERSION_CODES.M)
     override fun write(audioData: ByteBuffer, sizeInBytes: Int, writeMode: Int, timestamp: Long): Int {
-        // timestamp is in nanoseconds, convert to microseconds
         val presentationTimeUs = timestamp / 1000L
-        return writeInternal(audioData, sizeInBytes, presentationTimeUs)
+        
+        // Create a copy for our buffer since writeInternal will consume the data
+        val originalPosition = audioData.position()
+        val copyForOurBuffer = audioData.duplicate()
+        copyForOurBuffer.limit(originalPosition + sizeInBytes)
+        
+        // Copy to our buffer first  
+        writeInternal(copyForOurBuffer, sizeInBytes, presentationTimeUs)
+        
+        // Forward to real AudioTrack (audioData position unchanged)
+        return realAudioTrack.write(audioData, sizeInBytes, writeMode, timestamp)
     }
     
     private fun writeInternal(audioData: ByteArray, offsetInBytes: Int, sizeInBytes: Int, timestamp: Long?): Int {
@@ -150,76 +177,63 @@ class FakeAudioTrack(
     private fun estimateTimestampUs(): Long {
         // Estimate based on written frames and sample rate
         val writtenFrameCount = writtenFrames.get()
-        return (writtenFrameCount * 1_000_000L) / sampleRate
+        return (writtenFrameCount * 1_000_000L) / sampleRate.toLong()
     }
     
     override fun play() {
-        Log.d(TAG, "FakeAudioTrack.play()")
-        playState = PLAYSTATE_PLAYING
-        startTimeNanos = System.nanoTime()
+        Log.d(TAG, "FakeAudioTrack.play() - delegating to real AudioTrack")
+        realAudioTrack.play()
     }
     
     override fun stop() {
-        Log.d(TAG, "FakeAudioTrack.stop()")
-        playState = PLAYSTATE_STOPPED
+        Log.d(TAG, "FakeAudioTrack.stop() - delegating to real AudioTrack")
+        realAudioTrack.stop()
     }
     
     override fun pause() {
-        Log.d(TAG, "FakeAudioTrack.pause()")
-        playState = PLAYSTATE_PAUSED
-        pauseTimeNanos = System.nanoTime()
+        Log.d(TAG, "FakeAudioTrack.pause() - delegating to real AudioTrack")
+        realAudioTrack.pause()
     }
     
     override fun flush() {
-        Log.d(TAG, "FakeAudioTrack.flush()")
-        writtenFrames.set(0L)
+        Log.d(TAG, "FakeAudioTrack.flush() - delegating to real AudioTrack and clearing buffer")
+        realAudioTrack.flush()
         audioBuffer.clear()
     }
     
     override fun release() {
-        Log.d(TAG, "FakeAudioTrack.release()")
-        playState = PLAYSTATE_STOPPED
+        Log.d(TAG, "FakeAudioTrack.release() - delegating to real AudioTrack")
+        realAudioTrack.release()
     }
     
-    override fun getState(): Int = STATE_INITIALIZED
-    override fun getPlayState(): Int = playState
-    override fun getBufferSizeInFrames(): Int = super.getBufferSizeInFrames()
-    override fun getBufferCapacityInFrames(): Int = super.getBufferCapacityInFrames()
-    override fun getChannelCount(): Int = channelCount
-    override fun getSampleRate(): Int = sampleRate
-    override fun getAudioFormat(): Int = super.getAudioFormat()
-    override fun getAudioSessionId(): Int = super.getAudioSessionId()
+    // Delegate all properties/methods to real AudioTrack for proper behavior
+    override fun getState(): Int = realAudioTrack.state
+    override fun getPlayState(): Int = realAudioTrack.playState
+    override fun getBufferSizeInFrames(): Int = realAudioTrack.bufferSizeInFrames
+    override fun getBufferCapacityInFrames(): Int = realAudioTrack.bufferCapacityInFrames
+    override fun getChannelCount(): Int = realAudioTrack.channelCount
+    override fun getSampleRate(): Int = realAudioTrack.sampleRate
+    override fun getAudioFormat(): Int = realAudioTrack.audioFormat
+    override fun getAudioSessionId(): Int = realAudioTrack.audioSessionId
     
-    override fun setVolume(volume: Float): Int {
-        this.volume = volume
-        return SUCCESS
-    }
+    override fun setVolume(volume: Float): Int = realAudioTrack.setVolume(volume)
+    override fun getPlaybackHeadPosition(): Int = realAudioTrack.playbackHeadPosition
+    override fun getTimestamp(timestamp: AudioTimestamp?): Boolean = realAudioTrack.getTimestamp(timestamp)
     
-    override fun getPlaybackHeadPosition(): Int {
-        // Return position in frames
-        return (writtenFrames.get() and 0xFFFFFFFF).toInt()
-    }
-    
-    override fun getTimestamp(timestamp: AudioTimestamp?): Boolean {
-        if (timestamp == null) return false
-        
-        timestamp.framePosition = writtenFrames.get()
-        timestamp.nanoTime = System.nanoTime()
-        return true
-    }
-    
-    // Stub other methods that ExoPlayer might call
-    override fun setPlaybackParams(params: PlaybackParams): Unit = Unit
-    override fun getPlaybackParams(): PlaybackParams = PlaybackParams()
-    override fun attachAuxEffect(effectId: Int): Int = SUCCESS
-    override fun setAuxEffectSendLevel(level: Float): Int = SUCCESS
+    // Delegate other methods to real AudioTrack
+    override fun setPlaybackParams(params: PlaybackParams) = realAudioTrack.setPlaybackParams(params)
+    override fun getPlaybackParams(): PlaybackParams = realAudioTrack.playbackParams
+    override fun attachAuxEffect(effectId: Int): Int = realAudioTrack.attachAuxEffect(effectId)
+    override fun setAuxEffectSendLevel(level: Float): Int = realAudioTrack.setAuxEffectSendLevel(level)
     
     @RequiresApi(Build.VERSION_CODES.M)
-    override fun setPreferredDevice(deviceInfo: AudioDeviceInfo?): Boolean = true
+    override fun setPreferredDevice(deviceInfo: AudioDeviceInfo?): Boolean = realAudioTrack.setPreferredDevice(deviceInfo)
     
     @RequiresApi(Build.VERSION_CODES.N)
-    override fun addOnRoutingChangedListener(listener: AudioRouting.OnRoutingChangedListener?, handler: android.os.Handler?): Unit = Unit
+    override fun addOnRoutingChangedListener(listener: AudioRouting.OnRoutingChangedListener?, handler: android.os.Handler?) = 
+        realAudioTrack.addOnRoutingChangedListener(listener, handler)
     
     @RequiresApi(Build.VERSION_CODES.N)  
-    override fun removeOnRoutingChangedListener(listener: AudioRouting.OnRoutingChangedListener?): Unit = Unit
+    override fun removeOnRoutingChangedListener(listener: AudioRouting.OnRoutingChangedListener?) = 
+        realAudioTrack.removeOnRoutingChangedListener(listener)
 }

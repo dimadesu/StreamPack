@@ -49,24 +49,25 @@ class CustomAudioRenderersFactory(
         eventListener: AudioRendererEventListener,
         out: ArrayList<androidx.media3.exoplayer.Renderer>
     ) {
-        // Create DefaultAudioSink with our custom AudioTrackProvider that routes to CircularPcmBuffer
+        // Create our custom sink that preserves ExoPlayer's default behavior while intercepting PCM
         val customAudioSink = DefaultAudioSink.Builder(context)
             .setAudioTrackProvider(CircularBufferAudioTrackProvider(audioBuffer))
+            // Preserve default settings that might be important for A/V sync
+            .setEnableFloatOutput(false)
+            .setEnableAudioTrackPlaybackParams(false)
             .build()
         
-        // Use super.buildAudioRenderers with our custom sink - this gives us standard
-        // ExoPlayer audio renderers but with PCM data routed to our CircularPcmBuffer
         super.buildAudioRenderers(
             context, 
             extensionRendererMode, 
             mediaCodecSelector, 
             enableDecoderFallback, 
-            customAudioSink,  // Use our custom sink instead of the provided one
+            customAudioSink,
             eventHandler, 
             eventListener, 
             out
         )
         
-        android.util.Log.d("CustomAudioRenderersFactory", "Built audio renderers with CircularBufferAudioTrackProvider")
+        android.util.Log.d("CustomAudioRenderersFactory", "Built audio renderers with CircularBufferAudioTrackProvider and default settings")
     }
 }
