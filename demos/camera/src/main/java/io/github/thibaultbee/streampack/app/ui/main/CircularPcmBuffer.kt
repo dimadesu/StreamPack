@@ -55,10 +55,24 @@ class CircularPcmBuffer(private val byteCapacity: Int) {
      * from ExoPlayer's audio sink configuration.
      */
     fun updateFormat(sampleRate: Int, channelCount: Int, bytesPerSample: Int) {
+        val oldSampleRate = this.sampleRateInternal
+        val oldChannelCount = this.channelCountInternal
+        val oldBytesPerSample = this.bytesPerSampleInternal
+        
         this.sampleRateInternal = sampleRate
         this.channelCountInternal = channelCount
         this.bytesPerSampleInternal = bytesPerSample
-        android.util.Log.d("CircularPcmBuffer", "Format updated: sampleRate=$sampleRate, channelCount=$channelCount, bytesPerSample=$bytesPerSample")
+        
+        if (oldSampleRate != sampleRate || oldChannelCount != channelCount || oldBytesPerSample != bytesPerSample) {
+            android.util.Log.i("CircularPcmBuffer", "Format changed: $oldSampleRate→$sampleRate Hz, $oldChannelCount→$channelCount ch, $oldBytesPerSample→$bytesPerSample bytes/sample")
+            
+            // Warn about significant sample rate mismatches that could cause audio quality issues
+            if (oldSampleRate != sampleRate && kotlin.math.abs(oldSampleRate - sampleRate) > 1000) {
+                android.util.Log.w("CircularPcmBuffer", "WARNING: Large sample rate change detected! This could cause audio pitch/speed issues. Old: $oldSampleRate Hz, New: $sampleRate Hz")
+            }
+        } else {
+            android.util.Log.d("CircularPcmBuffer", "Format update called but no change: sampleRate=$sampleRate, channelCount=$channelCount, bytesPerSample=$bytesPerSample")
+        }
     }
 
     /**

@@ -68,7 +68,7 @@ class DataStoreRepository(
                 } else {
                     0
                 }
-        AudioConfig(
+        val audioConfig = AudioConfig(
             mimeType = mimeType,
             channelConfig = channelConfig,
             startBitrate = startBitrate,
@@ -76,6 +76,8 @@ class DataStoreRepository(
             byteFormat = byteFormat,
             profile = profile
         )
+        android.util.Log.i("DataStoreRepository", "AudioConfig created: sampleRate=$sampleRate, mimeType=$mimeType, channelConfig=$channelConfig")
+        audioConfig
     }.distinctUntilChanged()
 
     val isVideoEnableFlow: Flow<Boolean> = dataStore.data.map { preferences ->

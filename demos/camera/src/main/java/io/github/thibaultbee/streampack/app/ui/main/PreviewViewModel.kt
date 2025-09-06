@@ -365,6 +365,24 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                                             it.byteFormat
                                         )
                                         val pcmBuffer = CircularPcmBuffer(bufferSize * 2)
+                                        
+                                        // Pre-initialize CircularPcmBuffer with correct format from AudioConfig
+                                        // This ensures the initial format matches StreamPack encoder expectations
+                                        val channelCount = when (it.channelConfig) {
+                                            android.media.AudioFormat.CHANNEL_IN_MONO -> 1
+                                            android.media.AudioFormat.CHANNEL_IN_STEREO -> 2
+                                            else -> 2
+                                        }
+                                        val bytesPerSample = when (it.byteFormat) {
+                                            android.media.AudioFormat.ENCODING_PCM_8BIT -> 1
+                                            android.media.AudioFormat.ENCODING_PCM_16BIT -> 2
+                                            android.media.AudioFormat.ENCODING_PCM_FLOAT -> 4
+                                            android.media.AudioFormat.ENCODING_PCM_24BIT_PACKED -> 3
+                                            android.media.AudioFormat.ENCODING_PCM_32BIT -> 4
+                                            else -> 2
+                                        }
+                                        pcmBuffer.updateFormat(it.sampleRate, channelCount, bytesPerSample)
+                                        android.util.Log.i("PreviewViewModel", "Pre-initialized CircularPcmBuffer with StreamPack AudioConfig: sampleRate=${it.sampleRate}, channels=$channelCount, bytesPerSample=$bytesPerSample")
 
                                         // Single ExoPlayer instance with pass-through FakeAudioTrack for both A/V
                                         val renderersFactory = CustomAudioRenderersFactory(application, pcmBuffer)

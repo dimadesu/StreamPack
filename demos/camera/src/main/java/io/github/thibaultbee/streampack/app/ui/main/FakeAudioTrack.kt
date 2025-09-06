@@ -56,9 +56,10 @@ class FakeAudioTrack(
     private val writtenFrames = AtomicLong(0L)
     
     init {
-        Log.d(TAG, "PassThrough FakeAudioTrack created: sampleRate=$sampleRate, channels=$channelCount, bytesPerFrame=$bytesPerFrame")
-        // Update CircularPcmBuffer with the actual format
+        Log.i(TAG, "FakeAudioTrack created: sampleRate=$sampleRate, channels=$channelCount, bytesPerFrame=$bytesPerFrame")
+        // Update CircularPcmBuffer with the actual format detected by ExoPlayer
         audioBuffer.updateFormat(sampleRate, channelCount, bytesPerSample)
+        Log.i(TAG, "Updated CircularPcmBuffer format from ExoPlayer AudioFormat")
     }
     
     override fun write(audioData: ByteArray, offsetInBytes: Int, sizeInBytes: Int): Int {
