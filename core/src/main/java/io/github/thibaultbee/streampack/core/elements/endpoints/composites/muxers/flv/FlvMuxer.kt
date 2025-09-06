@@ -25,11 +25,16 @@ import io.github.thibaultbee.streampack.core.elements.endpoints.composites.muxer
 import io.github.thibaultbee.streampack.core.elements.endpoints.composites.muxers.flv.tags.OnMetadata
 import io.github.thibaultbee.streampack.core.elements.utils.extensions.isAudio
 import io.github.thibaultbee.streampack.core.elements.utils.extensions.isVideo
+import android.util.Log
+import java.util.zip.CRC32
 
 class FlvMuxer(
     override var listener: IMuxerInternal.IMuxerListener? = null,
     private val isForFile: Boolean,
 ) : IMuxerInternal {
+    private companion object {
+        private const val TAG = "FlvMuxer"
+    }
     override val info by lazy { FlvMuxerInfo }
     private val streams = mutableListOf<Stream>()
     private val hasAudio: Boolean
@@ -72,15 +77,19 @@ class FlvMuxer(
         stream.sendHeader = false
         val flvTags = AVTagsFactory(frame, stream.config, sendHeader).build()
         flvTags.forEach {
-            listener?.onOutputFrame(
-                Packet(
-                    it.write(), frame.ptsInUs, if (frame.isVideo) {
-                        PacketType.VIDEO
-                    } else {
-                        PacketType.AUDIO
-                    }
-                )
+            val payload = it.write()
+            val packet = Packet(
+                payload, frame.ptsInUs, if (frame.isVideo) PacketType.VIDEO else PacketType.AUDIO
             )
+
+            // Compute CRC32 for correlation debugging (operate on a duplicate to avoid changing position)
+            val dup = payload.duplicate()
+            val bytes = ByteArray(dup.remaining())
+            dup.get(bytes)
+            val crc = CRC32().apply { update(bytes) }.value
+            Log.d(TAG, "FlvMuxer: emitting packet tsUs=${packet.ts} size=${payload.remaining()} type=${packet.type} crc=0x${crc.toString(16)}")
+
+            listener?.onOutputFrame(packet)
         }
     }
 
@@ -109,21 +118,23 @@ class FlvMuxer(
     override fun startStream() {
         // Header
         if (isForFile) {
-            listener?.onOutputFrame(
-                Packet(
-                    FlvHeader(hasAudio, hasVideo).write(),
-                    0
-                )
-            )
+            val header = FlvHeader(hasAudio, hasVideo).write()
+            val headerDup = header.duplicate()
+            val headerBytes = ByteArray(headerDup.remaining())
+            headerDup.get(headerBytes)
+            val crc = CRC32().apply { update(headerBytes) }.value
+            Log.d(TAG, "FlvMuxer: emitting header tsUs=0 size=${header.remaining()} crc=0x${crc.toString(16)}")
+            listener?.onOutputFrame(Packet(header, 0))
         }
 
         // Metadata
-        listener?.onOutputFrame(
-            Packet(
-                OnMetadata.fromConfigs(streams.map { it.config }).write(),
-                0
-            )
-        )
+    val meta = OnMetadata.fromConfigs(streams.map { it.config }).write()
+    val metaDup = meta.duplicate()
+    val metaBytes = ByteArray(metaDup.remaining())
+    metaDup.get(metaBytes)
+    val metaCrc = CRC32().apply { update(metaBytes) }.value
+    Log.d(TAG, "FlvMuxer: emitting metadata tsUs=0 size=${meta.remaining()} crc=0x${metaCrc.toString(16)}")
+    listener?.onOutputFrame(Packet(meta, 0))
     }
 
     override fun stopStream() {

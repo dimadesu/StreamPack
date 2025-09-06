@@ -364,7 +364,16 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                                             it.channelConfig,
                                             it.byteFormat
                                         )
-                                        val pcmBuffer = CircularPcmBuffer(bufferSize * 2)
+                                        // Build pcm buffer using actual audio configuration so the
+                                        // bytes->duration math matches the decoded PCM format.
+                                        val channelCount = if (it.channelConfig == android.media.AudioFormat.CHANNEL_IN_MONO) 1 else 2
+                                        val bytesPerSample = when (it.byteFormat) {
+                                            android.media.AudioFormat.ENCODING_PCM_16BIT -> 2
+                                            android.media.AudioFormat.ENCODING_PCM_8BIT -> 1
+                                            android.media.AudioFormat.ENCODING_PCM_FLOAT -> 4
+                                            else -> 2
+                                        }
+                                        val pcmBuffer = CircularPcmBuffer(bufferSize * 2, it.sampleRate, channelCount, bytesPerSample)
 
                                         val renderersFactory = CustomAudioRenderersFactory(application, pcmBuffer)
                                         val exoPlayerInstance = ExoPlayer

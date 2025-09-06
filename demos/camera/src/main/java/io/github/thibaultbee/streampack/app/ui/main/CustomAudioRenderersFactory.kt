@@ -48,13 +48,21 @@ class CustomAudioRenderersFactory(
         eventListener: AudioRendererEventListener,
         out: ArrayList<androidx.media3.exoplayer.Renderer>
     ) {
-        out.add(
-            CustomMedia3AudioRenderer(
-                context,
-                mediaCodecSelector,
-                audioBuffer
-            )
+        // Use the default audio renderer pipeline but wrap the provided AudioSink so we can
+        // capture the sink-mapped presentation timestamps and the PCM data that is actually
+        // handed to the sink. This avoids bypassing the normal sink mapping that the player
+        // performs (the previous approach added a custom renderer directly which skipped this
+        // mapping).
+        val wrappedSink = WrappedAudioSink(audioSink, audioBuffer)
+        super.buildAudioRenderers(
+            context,
+            extensionRendererMode,
+            mediaCodecSelector,
+            enableDecoderFallback,
+            wrappedSink,
+            eventHandler,
+            eventListener,
+            out
         )
-//        super.buildAudioRenderers(context, extensionRendererMode, mediaCodecSelector, enableDecoderFallback, audioSink, eventHandler, eventListener, out)
     }
 }

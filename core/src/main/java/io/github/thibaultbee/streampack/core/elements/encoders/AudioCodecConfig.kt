@@ -102,14 +102,35 @@ open class AudioCodecConfig(
      * @return the corresponding audio media format
      */
     override fun getFormat(withProfileLevel: Boolean): MediaFormat {
+        // Prefer runtime-reported format when available to avoid encoder/source mismatch.
+        val runtimeSampleRate = RuntimeAudioFormat.sampleRate ?: sampleRate
+        val runtimeChannelCount = RuntimeAudioFormat.channelCount ?: getNumberOfChannels(channelConfig)
         val format = MediaFormat.createAudioFormat(
-            mimeType, sampleRate, getNumberOfChannels(channelConfig)
+            mimeType, runtimeSampleRate, runtimeChannelCount
         )
+
+        // Log created format for runtime diagnosis
+        try {
+            android.util.Log.i("AudioCodecConfig", "Created MediaFormat: mime=$mimeType, sampleRate=$sampleRate, channels=${getNumberOfChannels(channelConfig)}, byteFormat=$byteFormat, bitrate=$startBitrate")
+        } catch (_: Throwable) {
+        }
 
         // Extended audio format
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            // If runtime byte format is provided, prefer it.
+            val runtimeBytesPerSample = RuntimeAudioFormat.bytesPerSample
+            val runtimePcmEncoding = runtimeBytesPerSample?.let { bps ->
+                when (bps) {
+                    1 -> android.media.AudioFormat.ENCODING_PCM_8BIT
+                    2 -> android.media.AudioFormat.ENCODING_PCM_16BIT
+                    3 -> android.media.AudioFormat.ENCODING_PCM_24BIT_PACKED
+                    4 -> android.media.AudioFormat.ENCODING_PCM_32BIT
+                    else -> byteFormat
+                }
+            } ?: byteFormat
+
             format.setInteger(
-                MediaFormat.KEY_PCM_ENCODING, byteFormat
+                MediaFormat.KEY_PCM_ENCODING, runtimePcmEncoding
             )
         }
         format.setInteger(MediaFormat.KEY_BIT_RATE, startBitrate)

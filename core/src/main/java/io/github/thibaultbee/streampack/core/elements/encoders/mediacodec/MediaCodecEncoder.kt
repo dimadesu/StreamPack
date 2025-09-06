@@ -100,6 +100,11 @@ internal constructor(
         val mediaCodecWithFormat = MediaCodecUtils.createCodec(encoderConfig)
         mediaCodec = mediaCodecWithFormat.mediaCodec
         format = mediaCodecWithFormat.format
+        // Log encoder format for runtime diagnosis
+        try {
+            Log.i(tag, "Encoder MediaFormat: $format")
+        } catch (_: Throwable) {
+        }
     }
 
     private val listenerLock = Any()

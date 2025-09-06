@@ -19,6 +19,7 @@ import io.github.thibaultbee.srtdroid.core.enums.Boundary
 import io.github.thibaultbee.srtdroid.core.enums.SockOpt
 import io.github.thibaultbee.srtdroid.core.enums.Transtype
 import io.github.thibaultbee.srtdroid.core.models.MsgCtrl
+import android.util.Log
 import io.github.thibaultbee.srtdroid.core.models.SrtUrl.Mode
 import io.github.thibaultbee.srtdroid.core.models.Stats
 import io.github.thibaultbee.srtdroid.ktx.CoroutineSrtSocket
@@ -101,17 +102,35 @@ class SrtSink : AbstractSink() {
         } else {
             null
         }
-        return if (packet.ts == 0L) {
-            if (boundary != null) {
-                MsgCtrl(boundary = boundary)
+        // SRT MsgCtrl.srcTime expects wall-clock time in milliseconds (ms) so use
+        // System.currentTimeMillis(). The pipeline `packet.ts` is in microseconds
+        // and represents media PTS, not wall-clock; using it breaks receiver timing.
+        val srcTimeMs = System.currentTimeMillis()
+        if (packet.ts == 0L) {
+            return if (boundary != null) {
+                MsgCtrl(boundary = boundary!!)
             } else {
                 MsgCtrl()
             }
+        }
+
+        // For fragmented frames we must set srcTime only once (on SOLO or FIRST).
+        // Setting srcTime on every fragment produces many distinct wall-clock
+        // timestamps for the same media PTS and confuses receivers.
+        val hasSrcTime = when (boundary) {
+            Boundary.SOLO, Boundary.FIRST -> true
+            Boundary.SUBSEQUENT, Boundary.LAST, null -> false
+        }
+
+        if (hasSrcTime) {
+            Log.d(TAG, "SRT MsgCtrl srcTime(ms)=$srcTimeMs packet.ts(µs)=${packet.ts} boundary=$boundary")
+            return MsgCtrl(srcTime = srcTimeMs, boundary = boundary!!)
         } else {
-            if (boundary != null) {
-                MsgCtrl(srcTime = packet.ts, boundary = boundary)
+            Log.d(TAG, "SRT MsgCtrl no-srcTime packet.ts(µs)=${packet.ts} boundary=$boundary")
+            return if (boundary != null) {
+                MsgCtrl(boundary = boundary!!)
             } else {
-                MsgCtrl(srcTime = packet.ts)
+                MsgCtrl()
             }
         }
     }

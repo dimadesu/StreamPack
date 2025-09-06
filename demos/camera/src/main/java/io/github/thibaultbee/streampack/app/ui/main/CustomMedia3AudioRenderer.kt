@@ -6,6 +6,7 @@ import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
 import androidx.media3.exoplayer.mediacodec.MediaCodecAdapter
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import java.nio.ByteBuffer
+import java.util.zip.CRC32
 
 class CustomMedia3AudioRenderer(
     context: android.content.Context,
@@ -15,6 +16,7 @@ class CustomMedia3AudioRenderer(
         context,
         mediaCodecSelector,
 ) {
+    private val TAG = "CustomMedia3AudioRenderer"
     /**
      * Creates a new, writable ByteBuffer by copying the data from a source buffer.
      *
@@ -100,16 +102,29 @@ class CustomMedia3AudioRenderer(
 
             val bytesRead = buffer.position() - originalPosition
 
-            if (bytesRead > 0) {
+                if (bytesRead > 0) {
 
-                Log.i("XXX", "writing bytes $bytesRead")
+                    Log.i(TAG, "writing bytes $bytesRead")
 
-                if (!isFullyProcessed) {
-                   copy.limit(originalPosition + bytesRead)
+                    if (!isFullyProcessed) {
+                        copy.limit(originalPosition + bytesRead)
+                    }
+
+                    // Create a writable copy for the buffer that will be stored.
+                    val writable = copyToWritableByteBuffer(copy)
+
+                    // Compute CRC32 for diagnostics without modifying buffer positions.
+                    val dup = writable.duplicate()
+                    val arr = ByteArray(dup.remaining())
+                    dup.get(arr)
+                    val crc = CRC32()
+                    crc.update(arr)
+                    val crcVal = crc.value
+
+                    // Write to buffer and capture seq id for later correlation
+                    val seq = audioBuffer.writeFrame(writable, bufferPresentationTimeUs)
+                    Log.d(TAG, "PRODUCER: tsUs=$bufferPresentationTimeUs size=$bytesRead seq=$seq crc=0x${java.lang.Long.toHexString(crcVal)}")
                 }
-
-               audioBuffer.writeFrame(copyToWritableByteBuffer(copy), bufferPresentationTimeUs)
-           }
        }
 
        return isFullyProcessed
