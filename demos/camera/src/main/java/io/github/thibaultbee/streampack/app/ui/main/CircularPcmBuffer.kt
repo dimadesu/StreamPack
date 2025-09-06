@@ -20,6 +20,12 @@ class CircularPcmBuffer(private val byteCapacity: Int) {
     private var channelCountInternal: Int = 2  
     private var bytesPerSampleInternal: Int = 2
     
+    // Adaptive buffering parameters
+    private var initialFillThreshold = 20 // Start with 20% fill
+    private var minBufferThreshold = 5    // Minimum 5% before switching to fill mode
+    private var underrunCount = 0         // Track buffer underruns
+    private var lastReadTime = 0L         // Track read timing
+    
     // A data class to hold the audio frame's ByteBuffer and its presentation timestamp.
     private data class AudioFrame(val data: ByteBuffer, val timestamp: Long)
 
@@ -79,17 +85,20 @@ class CircularPcmBuffer(private val byteCapacity: Int) {
      * Clears the buffer, removing all frames and resetting the available byte count.
      */
     fun clear() {
-        println("[CircularPcmBuffer] Clearing buffer. Available bytes before clear: ${availableBytes.get()}")
+        android.util.Log.i("CircularPcmBuffer", "Clearing buffer. Available bytes: ${availableBytes.get()}")
         frameBuffer.clear()
         availableBytes.set(0)
         isFilling = true
-        println("[CircularPcmBuffer] Buffer cleared. Available bytes after clear: ${availableBytes.get()}")
+        // Reset adaptive buffering parameters
+        underrunCount = 0
+        initialFillThreshold = 20
+        lastReadTime = 0L
+        android.util.Log.i("CircularPcmBuffer", "Buffer cleared and reset to filling mode.")
     }
 
     /**
      * Writes an audio frame with its timestamp to the buffer.
-     * This method is thread-safe. It will split the incoming data into 4096-byte chunks
-     * to ensure compatibility with fixed-size MediaCodec buffers.
+     * This method is thread-safe and optimized for streaming performance.
      *
      * @param data The ByteBuffer containing the audio data. The ByteBuffer's position and limit
      * will be used to determine the size of the data to be written.
@@ -98,79 +107,82 @@ class CircularPcmBuffer(private val byteCapacity: Int) {
      */
     fun writeFrame(data: ByteBuffer, timestamp: Long) {
         val totalSize = data.remaining()
-        println("[CircularPcmBuffer] Attempting to write frame. Total data size: $totalSize, Timestamp: $timestamp")
+        android.util.Log.v("CircularPcmBuffer", "Writing frame. Size: $totalSize, Timestamp: $timestamp")
 
         val frame = AudioFrame(data, timestamp)
-
         val success = frameBuffer.offer(frame)
 
         if (success) {
             availableBytes.addAndGet(data.limit())
-            println("[CircularPcmBuffer] Chunk written. Chunk size: ${data.limit()}, Available bytes: ${availableBytes.get()}")
+            android.util.Log.v("CircularPcmBuffer", "Frame written. Available: ${availableBytes.get()}/${byteCapacity}")
         } else {
-            println("[CircularPcmBuffer] Buffer is full. Remaining data size: ${data.remaining()}")
+            android.util.Log.w("CircularPcmBuffer", "Buffer full! Dropping audio frame. Size: $totalSize")
         }
     }
 
     /**
      * Reads an audio frame with its timestamp from the buffer.
-     * This method is thread-safe and implements a basic buffering strategy:
-     * it will not start reading until the buffer is at least `30%` full to
-     * avoid feeding an encoder with too little data, which could cause glitches.
+     * This method is thread-safe and implements a refined buffering strategy:
+     * - Uses a lower initial fill threshold (20%) to reduce latency
+     * - Maintains minimum buffer level (10%) to prevent underruns  
+     * - Provides smoother streaming for real-time applications
      *
      * @return A `Pair` of `ByteBuffer` and timestamp if a frame is available, or `null` otherwise.
      */
     fun readFrame(size: Int): Pair<ByteBuffer, Long>? {
         // The `isFilling` state prevents premature reading.
         if (isFilling) {
-            // Check if the buffer has reached the minimum fill level to start draining.
-            if (isAtLeastFull(60)) { // Using a 30% fill level to ensure smooth draining.
+            // Check if the buffer has reached the adaptive fill level to start draining.
+            if (isAtLeastFull(initialFillThreshold)) {
                 isFilling = false
-                println("[CircularPcmBuffer] Switching to draining mode. Available bytes: ${availableBytes.get()}")
+                android.util.Log.i("CircularPcmBuffer", "Switching to draining mode. Available: ${availableBytes.get()}, Threshold: $initialFillThreshold%")
             } else {
-                println("[CircularPcmBuffer] Still in filling mode. Available bytes: ${availableBytes.get()}")
+                // Less verbose logging to reduce performance impact
+                android.util.Log.v("CircularPcmBuffer", "Still filling. Available: ${availableBytes.get()}/${byteCapacity}")
                 return null // Still filling, so no frame is available yet.
             }
         }
 
-
         val currentFrame = pendingFrame ?: frameBuffer.poll()
         if (currentFrame == null) {
-            // If the buffer is empty, switch back to the filling state.
+            // Keep some minimum buffer to avoid frequent fill/drain switches
+            if (isAtLeastFull(minBufferThreshold)) {
+                // Try to wait for more data rather than immediate fill mode switch
+                android.util.Log.v("CircularPcmBuffer", "Buffer low but not empty, waiting for more data")
+                return null
+            }
+            // Buffer underrun detected - adapt buffering strategy
+            underrunCount++
+            if (underrunCount > 5 && initialFillThreshold < 40) {
+                initialFillThreshold += 5 // Increase buffer threshold
+                android.util.Log.w("CircularPcmBuffer", "Frequent underruns detected. Increasing fill threshold to $initialFillThreshold%")
+            }
+            
+            // If buffer is truly empty, switch back to filling state
             isFilling = true
-            println("[CircularPcmBuffer] Buffer drained. Switching back to filling mode.")
-            return null // Buffer is empty.
+            android.util.Log.i("CircularPcmBuffer", "Buffer underrun #$underrunCount. Switching to filling mode.")
+            return null
         }
 
         pendingFrame = currentFrame
 
         val availableInChunk = currentFrame.data.remaining()
-
-//        println("[CircularPcmBuffer] Frame read. hello1")
         val toRead = minOf(availableInChunk, size)
 
-        println("[CircularPcmBuffer] Frame read. toRead $toRead")
+        android.util.Log.v("CircularPcmBuffer", "Reading $toRead bytes from buffer")
 
         // The destination buffer is correctly sized.
         val out = ByteBuffer.allocate(toRead)
 
-//        println("[CircularPcmBuffer] Frame read. hello3")
-
         // Create a temporary view of the source buffer to control the data transfer.
         val sourceView = currentFrame.data.duplicate()
-
-//        println("[CircularPcmBuffer] Frame read. hello4")
-
         sourceView.limit(sourceView.position() + toRead)
 
-//        println("[CircularPcmBuffer] Frame read. hello5")
-
-        // Put from the temporary view into our output buffer. This is the key step.
+        // Put from the temporary view into our output buffer.
         out.put(sourceView)
         out.flip()
 
-        // Now, manually advance the position of the original currentFrame.data
-        // by the amount we just read. This is crucial for subsequent reads.
+        // Advance the position of the original currentFrame.data
         currentFrame.data.position(currentFrame.data.position() + toRead)
 
         if (!currentFrame.data.hasRemaining()) {
@@ -179,7 +191,18 @@ class CircularPcmBuffer(private val byteCapacity: Int) {
 
         // Subtract only the number of bytes actually consumed.
         availableBytes.addAndGet(-toRead)
-        println("[CircularPcmBuffer] Frame read. Bytes read: $toRead, Available bytes: ${availableBytes.get()}")
+        
+        // Track successful reads for adaptive buffering
+        val currentTime = System.currentTimeMillis()
+        if (lastReadTime > 0 && (currentTime - lastReadTime) > 50) {
+            // Reset underrun count on successful sustained reads
+            if (underrunCount > 0) {
+                underrunCount = maxOf(0, underrunCount - 1)
+            }
+        }
+        lastReadTime = currentTime
+        
+        android.util.Log.v("CircularPcmBuffer", "Read complete. Bytes read: $toRead, Available: ${availableBytes.get()}")
 
         return Pair(out, currentFrame.timestamp)
     }
