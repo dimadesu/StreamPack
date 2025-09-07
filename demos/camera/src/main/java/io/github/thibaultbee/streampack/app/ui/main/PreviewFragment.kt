@@ -86,38 +86,32 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
     private fun bindProperties() {
         binding.liveButton.setOnClickListener { view ->
             view as ToggleButton
-            if (view.isPressed) {
-                if (view.isChecked) {
-                    startStreamIfPermissions(previewViewModel.requiredPermissions)
-                } else {
-                    stopStream()
-                }
+            Log.d(TAG, "Live button clicked - isChecked: ${view.isChecked}, streaming: ${previewViewModel.isStreamingLiveData.value}, trying: ${previewViewModel.isTryingConnectionLiveData.value}")
+            
+            // Check current state to determine action
+            val isCurrentlyStreaming = previewViewModel.isStreamingLiveData.value == true
+            val isTryingConnection = previewViewModel.isTryingConnectionLiveData.value == true
+            
+            if (!isCurrentlyStreaming && !isTryingConnection) {
+                // Not streaming and not trying - start stream
+                Log.d(TAG, "Starting stream...")
+                view.isChecked = true // Ensure button shows starting state
+                startStreamIfPermissions(previewViewModel.requiredPermissions)
+            } else if (isCurrentlyStreaming || isTryingConnection) {
+                // Streaming or trying to connect - stop stream
+                Log.d(TAG, "Stopping stream...")
+                view.isChecked = false // Ensure button shows stopping state
+                stopStream()
+            } else {
+                Log.w(TAG, "Uncertain state - button clicked but unclear action needed")
+                // Reset button to reflect actual state
+                view.isChecked = isCurrentlyStreaming || isTryingConnection
             }
         }
 
         binding.switchSourceButton.setOnClickListener {
             binding.bufferVisualizer.previewViewModel = previewViewModel
-            
-            // Check if we're switching to ExoPlayer source (which needs MediaProjection)
-            val currentVideoSource = previewViewModel.streamer.videoInput?.sourceFlow?.value
-            if (currentVideoSource is ICameraSource) {
-                // About to switch to ExoPlayer - request MediaProjection permission
-                Log.i(TAG, "Switching to ExoPlayer source - requesting MediaProjection permission")
-                val helper = previewViewModel.mediaProjectionHelper
-                helper.requestProjection(mediaProjectionLauncher) { mediaProjection: MediaProjection? ->
-                    if (mediaProjection != null) {
-                        Log.i(TAG, "MediaProjection permission granted - proceeding with source switch")
-                        // Pass the MediaProjection directly to avoid lookup issues
-                        previewViewModel.toggleVideoSourceWithProjection(binding.bufferVisualizer, mediaProjection)
-                    } else {
-                        Log.w(TAG, "MediaProjection permission denied - cannot switch to ExoPlayer audio capture")
-                        showError("Permission Required", "MediaProjection permission is required for ExoPlayer audio capture")
-                    }
-                }
-            } else {
-                // Switching back to camera - no special permission needed
-                previewViewModel.toggleVideoSource(binding.bufferVisualizer)
-            }
+            previewViewModel.toggleVideoSource(binding.bufferVisualizer)
         }
 
         previewViewModel.streamerErrorLiveData.observe(viewLifecycleOwner) {
@@ -129,27 +123,28 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
         }
 
         previewViewModel.isStreamingLiveData.observe(viewLifecycleOwner) { isStreaming ->
+            Log.d(TAG, "Streaming state changed to: $isStreaming")
             if (isStreaming) {
                 lockOrientation()
+                binding.liveButton.isChecked = true
             } else {
                 unlockOrientation()
-            }
-            if (isStreaming) {
-                binding.liveButton.isChecked = true
-            } else if (previewViewModel.isTryingConnectionLiveData.value == true) {
-                binding.liveButton.isChecked = true
-            } else {
-                binding.liveButton.isChecked = false
+                // Only set to false if we're not trying to connect
+                if (previewViewModel.isTryingConnectionLiveData.value != true) {
+                    binding.liveButton.isChecked = false
+                }
             }
         }
 
         previewViewModel.isTryingConnectionLiveData.observe(viewLifecycleOwner) { isWaitingForConnection ->
+            Log.d(TAG, "Trying connection state changed to: $isWaitingForConnection")
             if (isWaitingForConnection) {
                 binding.liveButton.isChecked = true
-            } else if (previewViewModel.isStreamingLiveData.value == true) {
-                binding.liveButton.isChecked = true
             } else {
-                binding.liveButton.isChecked = false
+                // Only set to false if we're not actually streaming
+                if (previewViewModel.isStreamingLiveData.value != true) {
+                    binding.liveButton.isChecked = false
+                }
             }
         }
 
@@ -183,7 +178,18 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
     }
 
     private fun startStream() {
-        previewViewModel.startStream()
+        Log.d(TAG, "startStream() called - about to request MediaProjection")
+        previewViewModel.startStreamWithMediaProjection(
+            mediaProjectionLauncher,
+            onSuccess = {
+                Log.i(TAG, "Stream started successfully with MediaProjection")
+            },
+            onError = { error ->
+                Log.e(TAG, "Stream start failed: $error")
+                showError("Stream Start Failed", error)
+                binding.liveButton.isChecked = false
+            }
+        )
     }
 
     private fun stopStream() {

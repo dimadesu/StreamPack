@@ -137,10 +137,15 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     var bufferVisualizerModel: BufferVisualizerModel? = null
 
+    // MediaProjection session for streaming
+    private var streamingMediaProjection: MediaProjection? = null
+
     override fun onCleared() {
         super.onCleared()
 //        application.unbindService(serviceConnection)
         // Clean up MediaProjection resources
+        streamingMediaProjection?.stop()
+        streamingMediaProjection = null
         mediaProjectionHelper.release()
         Log.i(TAG, "PreviewViewModel cleared and MediaProjection released")
     }
@@ -300,18 +305,200 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         }
     }
 
-    fun stopStream() {
+    /**
+     * Start streaming with MediaProjection support.
+     * Request MediaProjection permission and keep it active during streaming.
+     */
+    fun startStreamWithMediaProjection(
+        mediaProjectionLauncher: androidx.activity.result.ActivityResultLauncher<Intent>,
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
+        _isTryingConnectionLiveData.postValue(true)
+        
+        mediaProjectionHelper.requestProjection(mediaProjectionLauncher) { mediaProjection ->
+            Log.i(TAG, "MediaProjection callback received - mediaProjection: ${if (mediaProjection != null) "SUCCESS" else "NULL"}")
+            if (mediaProjection != null) {
+                streamingMediaProjection = mediaProjection
+                Log.i(TAG, "MediaProjection acquired for streaming session - starting setup...")
+                
+                viewModelScope.launch {
+                    try {
+                        Log.i(TAG, "About to check video source for audio setup...")
+                        // Check if we're on RTMP source - only use MediaProjection audio for RTMP
+                        val currentVideoSource = streamer.videoInput?.sourceFlow?.value
+                        Log.i(TAG, "Current video source: $currentVideoSource (isICameraSource: ${currentVideoSource is ICameraSource})")
+                        if (currentVideoSource !is ICameraSource) {
+                            // We're on RTMP source - use MediaProjection for audio capture
+                            Log.i(TAG, "RTMP source detected - setting up MediaProjection audio capture")
+                            try {
+                                streamer.setAudioSource(MediaProjectionAudioSourceFactory(mediaProjection))
+                                Log.i(TAG, "MediaProjection audio source configured for RTMP streaming")
+                            } catch (audioError: Exception) {
+                                Log.w(TAG, "MediaProjection audio setup failed, falling back to microphone: ${audioError.message}")
+                                // Fallback to microphone if MediaProjection audio fails
+                                streamer.setAudioSource(MicrophoneSourceFactory())
+                            }
+                        } else {
+                            // We're on Camera source - use microphone for audio
+                            Log.i(TAG, "Camera source detected - using microphone for audio")
+                            streamer.setAudioSource(MicrophoneSourceFactory())
+                        }
+                        
+                        // Start the actual stream
+                        startStreamInternal(onSuccess, onError)
+                    } catch (e: Exception) {
+                        _isTryingConnectionLiveData.postValue(false)
+                        val error = "Failed to configure MediaProjection audio: ${e.message}"
+                        Log.e(TAG, error, e)
+                        onError(error)
+                    }
+                }
+            } else {
+                _isTryingConnectionLiveData.postValue(false)
+                val error = "MediaProjection permission required for streaming"
+                Log.e(TAG, error)
+                onError(error)
+            }
+        }
+    }
+    
+    private fun startStreamInternal(onSuccess: () -> Unit, onError: (String) -> Unit) {
+        Log.i(TAG, "startStreamInternal called - beginning setup...")
         viewModelScope.launch {
             try {
-                streamer.stopStream()
-                streamer.close()
-                streamer.removeBitrateRegulatorController()
+                val descriptor = storageRepository.endpointDescriptorFlow.first()
+                Log.i(TAG, "Starting stream with descriptor: $descriptor")
+                Log.i(TAG, "About to call streamer.startStream()...")
+                streamer.startStream(descriptor)
+                Log.i(TAG, "streamer.startStream() completed successfully")
+
+                if (descriptor.type.sinkType == MediaSinkType.SRT) {
+                    val bitrateRegulatorConfig = storageRepository.bitrateRegulatorConfigFlow.first()
+                    if (bitrateRegulatorConfig != null) {
+                        Log.i(TAG, "Add bitrate regulator controller")
+                        streamer.addBitrateRegulatorController(
+                            DefaultSrtBitrateRegulatorController.Factory(
+                                bitrateRegulatorConfig = bitrateRegulatorConfig
+                            )
+                        )
+                    }
+                }
+                
+                Log.i(TAG, "Stream setup completed successfully, calling onSuccess()")
+                onSuccess()
             } catch (e: Throwable) {
-                Log.e(TAG, "stopStream failed", e)
+                val error = "Stream start failed: ${e.message ?: "Unknown error"}"
+                Log.e(TAG, "STREAM START EXCEPTION: $error", e)
+                onError(error)
+            } finally {
+                Log.i(TAG, "startStreamInternal finally block - setting isTryingConnection to false")
+                _isTryingConnectionLiveData.postValue(false)
             }
         }
     }
 
+    fun stopStream() {
+        viewModelScope.launch {
+            try {
+                val currentStreamingState = streamer.isStreamingFlow.value
+                Log.i(TAG, "stopStream() called - Current streaming state: $currentStreamingState")
+                
+                // If already stopped, don't do anything
+                if (currentStreamingState != true) {
+                    Log.i(TAG, "Stream is already stopped, skipping stop sequence")
+                    _isTryingConnectionLiveData.postValue(false)
+                    return@launch
+                }
+                
+                Log.i(TAG, "Stopping stream... Current streaming state: $currentStreamingState")
+                
+                // Release MediaProjection FIRST to interrupt any ongoing capture
+                streamingMediaProjection?.let { mediaProjection ->
+                    mediaProjection.stop()
+                    Log.i(TAG, "MediaProjection stopped - this should interrupt audio capture")
+                }
+                streamingMediaProjection = null
+                
+                // Stop streaming
+                try {
+                    if (streamer.isStreamingFlow.value == true) {
+                        streamer.stopStream()
+                        Log.i(TAG, "Stream stop command sent")
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error stopping stream: ${e.message}", e)
+                }
+                
+                // Clean up buffer visualizer
+                bufferVisualizerModel?.let {
+                    BufferVisualizerModel.circularPcmBuffer = null
+                    bufferVisualizerModel = null
+                    Log.i(TAG, "Buffer visualizer cleaned up")
+                }
+                
+                // Remove bitrate regulator
+                try {
+                    streamer.removeBitrateRegulatorController()
+                    Log.i(TAG, "Bitrate regulator removed")
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not remove bitrate regulator: ${e.message}")
+                }
+                
+                // Reset audio source to clean state BEFORE closing streamer
+                try {
+                    val currentVideoSource = streamer.videoInput?.sourceFlow?.value
+                    if (currentVideoSource !is ICameraSource) {
+                        // We're on RTMP source - reset audio to microphone for clean state
+                        Log.i(TAG, "RTMP source detected after stop - resetting audio to microphone")
+                        streamer.setAudioSource(MicrophoneSourceFactory())
+                    } else {
+                        // Camera source - ensure microphone is set
+                        Log.i(TAG, "Camera source detected after stop - ensuring microphone audio")
+                        streamer.setAudioSource(MicrophoneSourceFactory())
+                    }
+                    Log.i(TAG, "Audio source reset to microphone after stream stop")
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error resetting audio source after stop: ${e.message}", e)
+                }
+                
+                // Wait a bit for cleanup
+                kotlinx.coroutines.delay(200)
+
+                // Close the streamer
+                try {
+                    streamer.close()
+                    Log.i(TAG, "Streamer closed")
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error closing streamer: ${e.message}", e)
+                }
+                
+                // Wait a moment and check final state
+                kotlinx.coroutines.delay(300)
+                
+                // Clear connection state regardless - this should trigger UI update
+                _isTryingConnectionLiveData.postValue(false)
+                
+                // Force check streaming state after cleanup
+                val finalStreamingState = streamer.isStreamingFlow.value
+                Log.i(TAG, "Stream stop completed. Final streaming state: $finalStreamingState")
+                
+                // If somehow still streaming, log it but don't try complex recovery
+                if (finalStreamingState == true) {
+                    Log.w(TAG, "WARNING: Stream may still be active after stop procedure")
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "stopStream failed", e)
+                // Force clear state
+                streamingMediaProjection?.stop()
+                streamingMediaProjection = null
+                _isTryingConnectionLiveData.postValue(false)
+                BufferVisualizerModel.circularPcmBuffer = null
+                bufferVisualizerModel = null
+            }
+        }
+    }
+    
     fun setMute(isMuted: Boolean) {
         streamer.audioInput?.isMuted = isMuted
     }
@@ -353,32 +540,35 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         viewModelScope.launch {
             val nextSource = when (videoSource) {
                 is ICameraSource -> {
-                    // For ExoPlayer audio capture, we need MediaProjection permission
-                    // This replaces the complex FakeAudioTrack interception approach
-                    val mediaProjection = mediaProjectionHelper.getMediaProjection()
+                    Log.i(TAG, "Switching from Camera to RTMP source")
+                    // For ExoPlayer audio capture, check if we have MediaProjection from streaming session
+                    val mediaProjection = streamingMediaProjection ?: mediaProjectionHelper.getMediaProjection()
                     if (mediaProjection != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                         Log.i(TAG, "Using MediaProjection-based ExoPlayer audio capture")
                         setupExoPlayerWithMediaProjection(bufferVisualizer, mediaProjection)
                     } else {
-                        Log.w(TAG, "MediaProjection not available - falling back to complex buffer approach")
-                        // Fallback to the existing complex approach if MediaProjection is not available
-                        setupComplexAudioCapture(bufferVisualizer)
+                        Log.w(TAG, "MediaProjection not available - will be requested when streaming starts")
+                        // Set up ExoPlayer without MediaProjection audio for now
+                        setupExoPlayerWithoutMediaProjection(bufferVisualizer)
                     }
                 }
                 else -> {
+                    Log.i(TAG, "Switching from RTMP back to Camera source")
                     // Switching back to camera - clean up MediaProjection and buffers
                     bufferVisualizer.stopObserving()
                     BufferVisualizerModel.circularPcmBuffer = null
                     bufferVisualizerModel = null
                     
-                    // Release MediaProjection resources
-                    mediaProjectionHelper.release()
+                    // Don't release streaming MediaProjection here - it's managed by stream lifecycle
+                    if (streamingMediaProjection == null) {
+                        mediaProjectionHelper.release()
+                    }
                     
                     streamer.setVideoSource(CameraSourceFactory())
                     streamer.setAudioSource(MicrophoneSourceFactory())
                 }
             }
-            Log.i(TAG, "Switch video source to $nextSource")
+            Log.i(TAG, "Switch video source completed")
         }
     }
 
@@ -427,10 +617,40 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         // Set video source - ExoPlayer video display
         streamer.setVideoSource(CustomStreamPackSourceInternal.Factory(exoPlayerInstance))
         
-        // Set audio source - MediaProjection capturing ExoPlayer's audio output
-        streamer.setAudioSource(MediaProjectionAudioSourceFactory(mediaProjection))
+        // Set audio source - try MediaProjection, fallback to microphone if it fails
+        try {
+            streamer.setAudioSource(MediaProjectionAudioSourceFactory(mediaProjection))
+            Log.i(TAG, "MediaProjection audio source configured for ExoPlayer")
+        } catch (e: Exception) {
+            Log.w(TAG, "MediaProjection audio source failed, using microphone fallback: ${e.message}")
+            streamer.setAudioSource(MicrophoneSourceFactory())
+        }
         
-        Log.i(TAG, "MediaProjection-based ExoPlayer audio/video setup completed")
+        Log.i(TAG, "ExoPlayer with MediaProjection setup completed")
+    }
+
+    /**
+     * Set up ExoPlayer without MediaProjection - uses microphone for audio.
+     * MediaProjection will be configured when streaming starts.
+     */
+    private suspend fun setupExoPlayerWithoutMediaProjection(bufferVisualizer: BufferVisualizerView) {
+        // Create ExoPlayer for video
+        val exoPlayerInstance = ExoPlayer.Builder(application).build()
+        val mediaItem = MediaItem.fromUri("rtmp://localhost:1935/publish/live")
+        val mediaSource = ProgressiveMediaSource.Factory(
+            DefaultDataSource.Factory(application)
+        ).createMediaSource(mediaItem)
+        
+        exoPlayerInstance.setMediaSource(mediaSource)
+        exoPlayerInstance.volume = 0f  // Mute for now
+        
+        // Set video source - ExoPlayer video display
+        streamer.setVideoSource(CustomStreamPackSourceInternal.Factory(exoPlayerInstance))
+        
+        // Use microphone for now - MediaProjection audio will be set when streaming starts
+        streamer.setAudioSource(MicrophoneSourceFactory())
+        
+        Log.i(TAG, "ExoPlayer setup completed with microphone audio (MediaProjection will be configured on stream start)")
     }
 
     /**
