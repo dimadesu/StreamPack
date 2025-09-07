@@ -3,10 +3,7 @@ package io.github.thibaultbee.streampack.app.ui.main
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.ProgressiveMediaSource
-import io.github.thibaultbee.streampack.app.sources.audio.AudioRecordWrapper3
 import io.github.thibaultbee.streampack.core.elements.processing.video.source.ISourceInfoProvider
 import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoSourceInternal
 import io.github.thibaultbee.streampack.core.elements.sources.video.VideoSourceConfig
@@ -118,36 +115,6 @@ class CustomStreamPackSourceInternal (
                 }, 100) // Slightly longer delay to avoid immediate restarts
             } catch (e: Exception) {
                 android.util.Log.e("CustomStreamPackSource", "Error stopping ExoPlayer: ${e.message}", e)
-            }
-        }
-    }
-
-    /**
-     * Graceful pause - keeps ExoPlayer prepared but pauses playback
-     */
-    fun pauseStream() {
-        android.util.Log.d("CustomStreamPackSource", "pauseStream() called")
-        Handler(Looper.getMainLooper()).post {
-            try {
-                exoPlayer.playWhenReady = false
-                android.util.Log.d("CustomStreamPackSource", "Stream paused - ExoPlayer remains prepared")
-            } catch (e: Exception) {
-                android.util.Log.e("CustomStreamPackSource", "Error pausing stream: ${e.message}", e)
-            }
-        }
-    }
-
-    /**
-     * Resume from pause - resumes playback without re-preparing
-     */
-    fun resumeStream() {
-        android.util.Log.d("CustomStreamPackSource", "resumeStream() called")
-        Handler(Looper.getMainLooper()).post {
-            try {
-                exoPlayer.playWhenReady = true
-                android.util.Log.d("CustomStreamPackSource", "Stream resumed - no rebuffering needed")
-            } catch (e: Exception) {
-                android.util.Log.e("CustomStreamPackSource", "Error resuming stream: ${e.message}", e)
             }
         }
     }
