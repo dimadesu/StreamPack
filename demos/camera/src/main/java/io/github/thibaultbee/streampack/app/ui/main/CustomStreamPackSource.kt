@@ -27,45 +27,155 @@ class CustomStreamPackSourceInternal (
     })
     private val _isStreamingFlow = MutableStateFlow(false)
     override val isStreamingFlow: StateFlow<Boolean> get() = _isStreamingFlow
-    private var previewPlayer: ExoPlayer? = null // For preview
-
     override suspend fun startStream() {
         Handler(Looper.getMainLooper()).post {
-            exoPlayer.prepare()
-            exoPlayer.playWhenReady = true
+            try {
+                android.util.Log.d("CustomStreamPackSource", "Starting stream - playbackState: ${exoPlayer.playbackState}")
+                android.util.Log.d("CustomStreamPackSource", "MediaItem count: ${exoPlayer.mediaItemCount}")
+                android.util.Log.d("CustomStreamPackSource", "Output surface: $outputSurface")
+                
+                // Ensure we have an output surface before starting
+                if (outputSurface == null) {
+                    android.util.Log.w("CustomStreamPackSource", "No output surface set - cannot start streaming")
+                    _isStreamingFlow.value = false
+                    return@post
+                }
+                
+                outputSurface?.let { surface ->
+                    exoPlayer.setVideoSurface(surface)
+                    android.util.Log.d("CustomStreamPackSource", "Set video surface to output")
+                }
+                
+                // Set streaming to true - streaming pipeline can work even if ExoPlayer preview fails
+                _isStreamingFlow.value = true
+                
+                // Try to prepare and start ExoPlayer for preview, but don't fail streaming if it doesn't work
+                try {
+                    if (exoPlayer.mediaItemCount > 0) {
+                        android.util.Log.d("CustomStreamPackSource", "ExoPlayer has media items - preparing for playback")
+                        if (exoPlayer.playbackState == androidx.media3.common.Player.STATE_IDLE) {
+                            android.util.Log.d("CustomStreamPackSource", "Preparing ExoPlayer")
+                            exoPlayer.prepare()
+                        }
+                        android.util.Log.d("CustomStreamPackSource", "Setting playWhenReady = true")
+                        exoPlayer.playWhenReady = true
+                    } else {
+                        android.util.Log.d("CustomStreamPackSource", "No media items - ExoPlayer will be used as surface target only")
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("CustomStreamPackSource", "ExoPlayer preparation failed, but streaming can continue: ${e.message}")
+                }
+                
+                // Add a listener to monitor playback state changes
+                exoPlayer.addListener(object : androidx.media3.common.Player.Listener {
+                    override fun onPlaybackStateChanged(playbackState: Int) {
+                        android.util.Log.d("CustomStreamPackSource", "Playback state changed to: $playbackState")
+                        when (playbackState) {
+                            androidx.media3.common.Player.STATE_READY -> {
+                                android.util.Log.i("CustomStreamPackSource", "ExoPlayer is ready and playing")
+                            }
+                            androidx.media3.common.Player.STATE_ENDED -> {
+                                android.util.Log.w("CustomStreamPackSource", "ExoPlayer playback ended")
+                            }
+                        }
+                    }
+                    
+                    override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                        android.util.Log.e("CustomStreamPackSource", "ExoPlayer error: ${error.message}", error)
+                        // Don't stop streaming on ExoPlayer error - it might be used as surface target only
+                        android.util.Log.w("CustomStreamPackSource", "Continuing streaming despite ExoPlayer error")
+                    }
+                })
+            } catch (e: Exception) {
+                android.util.Log.e("CustomStreamPackSource", "Error starting stream: ${e.message}", e)
+                _isStreamingFlow.value = false
+            }
         }
-        _isStreamingFlow.value = true
     }
 
     override suspend fun stopStream() {
-        Handler(Looper.getMainLooper()).post {
-            exoPlayer.stop()
-        }
+        android.util.Log.d("CustomStreamPackSource", "stopStream() called - streaming: ${_isStreamingFlow.value}")
         _isStreamingFlow.value = false
+        Handler(Looper.getMainLooper()).post {
+            try {
+                android.util.Log.d("CustomStreamPackSource", "Stopping stream - current state: ${exoPlayer.playbackState}")
+                // Only stop playback, don't clear surface immediately to avoid rebuffering
+                exoPlayer.playWhenReady = false
+                android.util.Log.d("CustomStreamPackSource", "Set playWhenReady = false")
+                
+                // Give a small delay before stopping completely
+                Handler(Looper.getMainLooper()).postDelayed({
+                    try {
+                        // Only stop and clear surface if we're still not streaming
+                        if (!_isStreamingFlow.value) {
+                            exoPlayer.stop()
+                            exoPlayer.setVideoSurface(null)
+                            android.util.Log.d("CustomStreamPackSource", "Stream stopped and surface cleared")
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("CustomStreamPackSource", "Error in delayed stop: ${e.message}", e)
+                    }
+                }, 100) // Slightly longer delay to avoid immediate restarts
+            } catch (e: Exception) {
+                android.util.Log.e("CustomStreamPackSource", "Error stopping ExoPlayer: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
+     * Graceful pause - keeps ExoPlayer prepared but pauses playback
+     */
+    fun pauseStream() {
+        android.util.Log.d("CustomStreamPackSource", "pauseStream() called")
+        Handler(Looper.getMainLooper()).post {
+            try {
+                exoPlayer.playWhenReady = false
+                android.util.Log.d("CustomStreamPackSource", "Stream paused - ExoPlayer remains prepared")
+            } catch (e: Exception) {
+                android.util.Log.e("CustomStreamPackSource", "Error pausing stream: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
+     * Resume from pause - resumes playback without re-preparing
+     */
+    fun resumeStream() {
+        android.util.Log.d("CustomStreamPackSource", "resumeStream() called")
+        Handler(Looper.getMainLooper()).post {
+            try {
+                exoPlayer.playWhenReady = true
+                android.util.Log.d("CustomStreamPackSource", "Stream resumed - no rebuffering needed")
+            } catch (e: Exception) {
+                android.util.Log.e("CustomStreamPackSource", "Error resuming stream: ${e.message}", e)
+            }
+        }
     }
 
     override suspend fun configure(config: VideoSourceConfig) {
-        // TODO: Too much echo atm
-//        previewPlayer = ExoPlayer.Builder(context).build()
-
+        // Using main exoPlayer instance for both streaming and preview
         withContext(Dispatchers.Main) {
-            previewPlayer?.prepare()
-            previewPlayer?.playWhenReady = true
+            if (!exoPlayer.isCommandAvailable(androidx.media3.common.Player.COMMAND_PREPARE)) {
+                return@withContext
+            }
+            // ExoPlayer will be prepared when startStream() or startPreview() is called
         }
     }
 
     override fun release() {
-//        if (Looper.myLooper() == Looper.getMainLooper()) {
-//            exoPlayer.release()
-//            exoPlayer = null
-//            previewPlayer?.release()
-//            previewPlayer = null
-//        } else {
-            Handler(Looper.getMainLooper()).post {
+        Handler(Looper.getMainLooper()).post {
+            try {
+                // Clear surfaces first
+                exoPlayer.setVideoSurface(null)
+                // Stop playback if still playing
+                if (exoPlayer.playbackState != androidx.media3.common.Player.STATE_IDLE) {
+                    exoPlayer.stop()
+                }
+                // Release the player
                 exoPlayer.release()
-                previewPlayer?.release()
-                previewPlayer = null
-//            }
+            } catch (e: Exception) {
+                android.util.Log.e("CustomStreamPackSource", "Error releasing ExoPlayer: ${e.message}", e)
+            }
         }
     }
 
@@ -87,8 +197,14 @@ class CustomStreamPackSourceInternal (
     override suspend fun setOutput(surface: android.view.Surface) {
         outputSurface = surface
         Handler(Looper.getMainLooper()).post {
-//        withContext(Dispatchers.Main) {
-            exoPlayer.setVideoSurface(surface)
+            try {
+                // Only set surface if we're not currently using preview surface
+                if (!_isPreviewingFlow.value || surface != previewSurface) {
+                    exoPlayer.setVideoSurface(surface)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("CustomStreamPackSource", "Error setting output surface: ${e.message}", e)
+            }
         }
     }
 
@@ -98,17 +214,34 @@ class CustomStreamPackSourceInternal (
 
     override suspend fun setPreview(surface: android.view.Surface) {
         previewSurface = surface
+        // Use main exoPlayer for preview - no separate instance needed
         Handler(Looper.getMainLooper()).post {
-//        withContext(Dispatchers.Main) {
-            previewPlayer?.setVideoSurface(surface)
+            try {
+                exoPlayer.setVideoSurface(surface)
+            } catch (e: Exception) {
+                android.util.Log.e("CustomStreamPackSource", "Error setting preview surface: ${e.message}", e)
+            }
         }
     }
 
     override suspend fun startPreview() {
         previewSurface?.let { surface ->
             Handler(Looper.getMainLooper()).post {
-//            withContext(Dispatchers.Main) {
-                previewPlayer?.setVideoSurface(surface)
+                try {
+                    exoPlayer.setVideoSurface(surface)
+                    // Only prepare and start playback if we have media items for preview
+                    if (exoPlayer.mediaItemCount > 0) {
+                        android.util.Log.d("CustomStreamPackSource", "Starting preview with media items")
+                        if (exoPlayer.playbackState == androidx.media3.common.Player.STATE_IDLE) {
+                            exoPlayer.prepare()
+                        }
+                        exoPlayer.playWhenReady = true
+                    } else {
+                        android.util.Log.d("CustomStreamPackSource", "Starting preview without media items - surface target only")
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("CustomStreamPackSource", "Error starting preview: ${e.message}", e)
+                }
             }
             _isPreviewingFlow.value = true
         } ?: run {
@@ -122,20 +255,30 @@ class CustomStreamPackSourceInternal (
     }
 
     override suspend fun stopPreview() {
-//        withContext(Dispatchers.Main) {
-        Handler(Looper.getMainLooper()).post {
-            previewPlayer?.stop()
-            previewPlayer?.setVideoSurface(null)
-//        }
-        }
         _isPreviewingFlow.value = false
+        Handler(Looper.getMainLooper()).post {
+            try {
+                // Only stop if we're not streaming - if streaming, keep playing but just remove preview surface
+                if (!_isStreamingFlow.value) {
+                    exoPlayer.setVideoSurface(null)
+                    exoPlayer.stop()
+                } else {
+                    // If streaming, switch back to output surface if different from preview
+                    if (outputSurface != previewSurface && outputSurface != null) {
+                        exoPlayer.setVideoSurface(outputSurface)
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("CustomStreamPackSource", "Error stopping preview: ${e.message}", e)
+            }
+        }
     }
 
     override fun <T> getPreviewSize(targetSize: android.util.Size, targetClass: Class<T>): android.util.Size {
-        android.util.Log.d("CustomStreamPackSource", "previewPlayer?.videoFormat ${previewPlayer?.videoFormat}")
+        android.util.Log.d("CustomStreamPackSource", "exoPlayer.videoFormat ${exoPlayer.videoFormat}")
         android.util.Log.d("CustomStreamPackSource", "targetSize $targetSize")
-        val width = previewPlayer?.videoFormat?.width ?: 1920
-        val height = previewPlayer?.videoFormat?.height ?: 1080
+        val width = exoPlayer.videoFormat?.width ?: 1920
+        val height = exoPlayer.videoFormat?.height ?: 1080
         val previewSize = android.util.Size(width, height)
         android.util.Log.d("CustomStreamPackSource", "previewSize: $previewSize")
         return previewSize

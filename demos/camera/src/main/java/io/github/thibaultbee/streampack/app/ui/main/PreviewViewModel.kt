@@ -537,24 +537,70 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     @RequiresPermission(Manifest.permission.CAMERA)
     fun toggleVideoSource(bufferVisualizer: BufferVisualizerView) {
         val videoSource = streamer.videoInput?.sourceFlow?.value
+        val isCurrentlyStreaming = isStreamingLiveData.value == true
+        
         viewModelScope.launch {
-            val nextSource = when (videoSource) {
+            when (videoSource) {
                 is ICameraSource -> {
-                    Log.i(TAG, "Switching from Camera to RTMP source")
+                    Log.i(TAG, "Switching from Camera to RTMP source (streaming: $isCurrentlyStreaming)")
+                    
+                    // If we're currently streaming, temporarily stop to prepare for source switch
+                    var wasStreaming = false
+                    if (isCurrentlyStreaming) {
+                        Log.i(TAG, "Temporarily stopping camera stream for source switch")
+                        wasStreaming = true
+                        try {
+                            streamer.stopStream()
+                            // Brief delay to ensure clean stop
+                            kotlinx.coroutines.delay(100)
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Error stopping stream during source switch: ${e.message}")
+                        }
+                    }
+                    
                     // For ExoPlayer audio capture, check if we have MediaProjection from streaming session
                     val mediaProjection = streamingMediaProjection ?: mediaProjectionHelper.getMediaProjection()
                     if (mediaProjection != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                        Log.i(TAG, "Using MediaProjection-based ExoPlayer audio capture")
+                        Log.i(TAG, "Using MediaProjection-based ExoPlayer audio capture with optimized buffering")
                         setupExoPlayerWithMediaProjection(bufferVisualizer, mediaProjection)
                     } else {
                         Log.w(TAG, "MediaProjection not available - will be requested when streaming starts")
-                        // Set up ExoPlayer without MediaProjection audio for now
+                        // Set up ExoPlayer without MediaProjection audio for now (with optimized buffering)
                         setupExoPlayerWithoutMediaProjection(bufferVisualizer)
+                    }
+                    
+                    // If we were streaming before, restart with RTMP source
+                    if (wasStreaming) {
+                        Log.i(TAG, "Restarting stream with RTMP source")
+                        try {
+                            // Small delay to let RTMP source initialize
+                            kotlinx.coroutines.delay(300)
+                            val descriptor = storageRepository.endpointDescriptorFlow.first()
+                            streamer.startStream(descriptor)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error restarting stream with RTMP: ${e.message}")
+                            _streamerErrorLiveData.postValue("Failed to restart stream with RTMP: ${e.message}")
+                        }
                     }
                 }
                 else -> {
-                    Log.i(TAG, "Switching from RTMP back to Camera source")
-                    // Switching back to camera - clean up MediaProjection and buffers
+                    Log.i(TAG, "Switching from RTMP back to Camera source (streaming: $isCurrentlyStreaming)")
+                    
+                    // If we're currently streaming, we need to stop the current source first
+                    var wasStreaming = false
+                    if (isCurrentlyStreaming) {
+                        Log.i(TAG, "Stopping RTMP streaming before switch")
+                        wasStreaming = true
+                        try {
+                            streamer.stopStream()
+                            // Small delay to ensure stream stops properly
+                            kotlinx.coroutines.delay(100)
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Error stopping stream during source switch: ${e.message}")
+                        }
+                    }
+                    
+                    // Clean up RTMP-related resources
                     bufferVisualizer.stopObserving()
                     BufferVisualizerModel.circularPcmBuffer = null
                     bufferVisualizerModel = null
@@ -564,8 +610,23 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         mediaProjectionHelper.release()
                     }
                     
+                    // Switch to camera source
                     streamer.setVideoSource(CameraSourceFactory())
                     streamer.setAudioSource(MicrophoneSourceFactory())
+                    
+                    // If we were streaming before, restart with camera
+                    if (wasStreaming) {
+                        Log.i(TAG, "Restarting stream with camera source")
+                        try {
+                            // Small delay to let camera source initialize
+                            kotlinx.coroutines.delay(200)
+                            val descriptor = storageRepository.endpointDescriptorFlow.first()
+                            streamer.startStream(descriptor)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error restarting stream with camera: ${e.message}")
+                            _streamerErrorLiveData.postValue("Failed to restart stream with camera: ${e.message}")
+                        }
+                    }
                 }
             }
             Log.i(TAG, "Switch video source completed")
@@ -575,9 +636,12 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     @RequiresPermission(Manifest.permission.CAMERA)
     fun toggleVideoSourceWithProjection(bufferVisualizer: BufferVisualizerView, mediaProjection: MediaProjection) {
         val videoSource = streamer.videoInput?.sourceFlow?.value
+        val isCurrentlyStreaming = isStreamingLiveData.value == true
+        
         viewModelScope.launch {
-            val nextSource = when (videoSource) {
+            when (videoSource) {
                 is ICameraSource -> {
+                    Log.i(TAG, "Switching from Camera to RTMP with MediaProjection (streaming: $isCurrentlyStreaming)")
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                         Log.i(TAG, "Using provided MediaProjection for ExoPlayer audio capture")
                         setupExoPlayerWithMediaProjection(bufferVisualizer, mediaProjection)
@@ -587,7 +651,21 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                     }
                 }
                 else -> {
-                    // Switching back to camera - clean up MediaProjection and buffers
+                    Log.i(TAG, "Switching from RTMP back to Camera source with MediaProjection (streaming: $isCurrentlyStreaming)")
+                    
+                    // If we're currently streaming, we need to stop the current source first
+                    if (isCurrentlyStreaming) {
+                        Log.i(TAG, "Stopping RTMP streaming before switch")
+                        try {
+                            streamer.stopStream()
+                            // Small delay to ensure stream stops properly
+                            kotlinx.coroutines.delay(100)
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Error stopping stream during source switch: ${e.message}")
+                        }
+                    }
+                    
+                    // Clean up RTMP-related resources
                     bufferVisualizer.stopObserving()
                     BufferVisualizerModel.circularPcmBuffer = null
                     bufferVisualizerModel = null
@@ -595,17 +673,44 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                     // Release MediaProjection resources
                     mediaProjectionHelper.release()
                     
+                    // Switch to camera source
                     streamer.setVideoSource(CameraSourceFactory())
                     streamer.setAudioSource(MicrophoneSourceFactory())
+                    
+                    // If we were streaming before, restart with camera
+                    if (isCurrentlyStreaming) {
+                        Log.i(TAG, "Restarting stream with camera source")
+                        try {
+                            // Small delay to let camera source initialize
+                            kotlinx.coroutines.delay(200)
+                            val descriptor = storageRepository.endpointDescriptorFlow.first()
+                            streamer.startStream(descriptor)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error restarting stream with camera: ${e.message}")
+                            _streamerErrorLiveData.postValue("Failed to restart stream with camera: ${e.message}")
+                        }
+                    }
                 }
             }
-            Log.i(TAG, "Switch video source to $nextSource")
         }
     }
 
     private suspend fun setupExoPlayerWithMediaProjection(bufferVisualizer: BufferVisualizerView, mediaProjection: MediaProjection) {
-        // Create ExoPlayer for video
-        val exoPlayerInstance = ExoPlayer.Builder(application).build()
+        // Create ExoPlayer for video with minimal buffering for immediate playback
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
+                DefaultLoadControl.DEFAULT_MAX_BUFFER_MS,
+                250, // Start playback after only 250ms of buffering (default is 2500ms)
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
+            )
+            .build()
+        
+        val exoPlayerInstance = ExoPlayer.Builder(application)
+            .setLoadControl(loadControl)
+            .build()
+        
+        // Set up RTMP media source for preview display
         val mediaItem = MediaItem.fromUri("rtmp://localhost:1935/publish/live")
         val mediaSource = ProgressiveMediaSource.Factory(
             DefaultDataSource.Factory(application)
@@ -613,6 +718,14 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         
         exoPlayerInstance.setMediaSource(mediaSource)
         exoPlayerInstance.volume = 0f  // Normal volume for MediaProjection to capture
+        
+        // Add error listener to handle RTMP connection failures gracefully
+        exoPlayerInstance.addListener(object : androidx.media3.common.Player.Listener {
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                Log.w(TAG, "ExoPlayer RTMP error (preview may not work): ${error.message}")
+                // Don't fail the entire setup - streaming can still work
+            }
+        })
         
         // Set video source - ExoPlayer video display
         streamer.setVideoSource(CustomStreamPackSourceInternal.Factory(exoPlayerInstance))
@@ -634,8 +747,21 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
      * MediaProjection will be configured when streaming starts.
      */
     private suspend fun setupExoPlayerWithoutMediaProjection(bufferVisualizer: BufferVisualizerView) {
-        // Create ExoPlayer for video
-        val exoPlayerInstance = ExoPlayer.Builder(application).build()
+        // Create ExoPlayer for video with minimal buffering for immediate playback
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
+                DefaultLoadControl.DEFAULT_MAX_BUFFER_MS,
+                250, // Start playback after only 250ms of buffering (default is 2500ms)
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
+            )
+            .build()
+        
+        val exoPlayerInstance = ExoPlayer.Builder(application)
+            .setLoadControl(loadControl)
+            .build()
+        
+        // Set up RTMP media source for preview display
         val mediaItem = MediaItem.fromUri("rtmp://localhost:1935/publish/live")
         val mediaSource = ProgressiveMediaSource.Factory(
             DefaultDataSource.Factory(application)
@@ -643,6 +769,14 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         
         exoPlayerInstance.setMediaSource(mediaSource)
         exoPlayerInstance.volume = 0f  // Mute for now
+        
+        // Add error listener to handle RTMP connection failures gracefully
+        exoPlayerInstance.addListener(object : androidx.media3.common.Player.Listener {
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                Log.w(TAG, "ExoPlayer RTMP error (preview may not work): ${error.message}")
+                // Don't fail the entire setup - streaming can still work
+            }
+        })
         
         // Set video source - ExoPlayer video display
         streamer.setVideoSource(CustomStreamPackSourceInternal.Factory(exoPlayerInstance))
