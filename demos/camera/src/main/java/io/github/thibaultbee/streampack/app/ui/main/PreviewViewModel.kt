@@ -25,6 +25,7 @@ import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.hardware.camera2.CaptureResult
 import android.media.AudioRecord
+import android.media.projection.MediaProjection
 import android.os.IBinder
 import android.util.Log
 import android.util.Range
@@ -48,6 +49,7 @@ import io.github.thibaultbee.streampack.app.data.storage.DataStoreRepository
 import io.github.thibaultbee.streampack.app.sources.audio.AudioRecordWrapper3
 import io.github.thibaultbee.streampack.app.sources.audio.CustomAudioInput3
 import io.github.thibaultbee.streampack.app.ui.main.usecases.BuildStreamerUseCase
+import io.github.thibaultbee.streampack.app.utils.MediaProjectionHelper
 import io.github.thibaultbee.streampack.app.utils.ObservableViewModel
 import io.github.thibaultbee.streampack.app.utils.dataStore
 import io.github.thibaultbee.streampack.app.utils.isEmpty
@@ -62,7 +64,7 @@ import io.github.thibaultbee.streampack.core.elements.sources.video.camera.Camer
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.ICameraSource
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.extensions.isFrameRateSupported
 import io.github.thibaultbee.streampack.core.interfaces.IWithVideoSource
-import io.github.thibaultbee.streampack.core.interfaces.releaseBlocking
+import io.github.thibaultbee.streampack.core.elements.sources.audio.audiorecord.MediaProjectionAudioSourceFactory
 import io.github.thibaultbee.streampack.core.interfaces.startStream
 import io.github.thibaultbee.streampack.core.streamers.single.SingleStreamer
 import io.github.thibaultbee.streampack.core.utils.extensions.isClosedException
@@ -80,11 +82,11 @@ import kotlinx.coroutines.launch
 class PreviewViewModel(private val application: Application) : ObservableViewModel() {
     private val storageRepository = DataStoreRepository(application, application.dataStore)
     private val rotationRepository = RotationRepository.getInstance(application)
-
+    val mediaProjectionHelper = MediaProjectionHelper(application)
     private val buildStreamerUseCase = BuildStreamerUseCase(application, storageRepository)
 
     private val streamerFlow = MutableStateFlow(buildStreamerUseCase())
-    private val streamer: SingleStreamer
+    val streamer: SingleStreamer
         get() = streamerFlow.value
     val streamerLiveData = streamerFlow.asLiveData()
 
@@ -138,6 +140,9 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     override fun onCleared() {
         super.onCleared()
 //        application.unbindService(serviceConnection)
+        // Clean up MediaProjection resources
+        mediaProjectionHelper.release()
+        Log.i(TAG, "PreviewViewModel cleared and MediaProjection released")
     }
 
     init {
@@ -348,91 +353,150 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         viewModelScope.launch {
             val nextSource = when (videoSource) {
                 is ICameraSource -> {
-
-                    storageRepository.audioConfigFlow
-                        .collect { config ->
-                            if (ActivityCompat.checkSelfPermission(
-                                    application,
-                                    Manifest.permission.RECORD_AUDIO
-                                ) == PackageManager.PERMISSION_GRANTED
-                            ) {
-                                config?.let {
-                                    // All heavy lifting and blocking calls should be here
-//                                    withContext(Dispatchers.Main) {
-                                        val bufferSize = AudioRecord.getMinBufferSize(
-                                            it.sampleRate,
-                                            it.channelConfig,
-                                            it.byteFormat
-                                        )
-                                        val pcmBuffer = CircularPcmBuffer(bufferSize * 2)
-                                        
-                                        // Pre-initialize CircularPcmBuffer with correct format from AudioConfig
-                                        // This ensures the initial format matches StreamPack encoder expectations
-                                        val channelCount = when (it.channelConfig) {
-                                            android.media.AudioFormat.CHANNEL_IN_MONO -> 1
-                                            android.media.AudioFormat.CHANNEL_IN_STEREO -> 2
-                                            else -> 2
-                                        }
-                                        val bytesPerSample = when (it.byteFormat) {
-                                            android.media.AudioFormat.ENCODING_PCM_8BIT -> 1
-                                            android.media.AudioFormat.ENCODING_PCM_16BIT -> 2
-                                            android.media.AudioFormat.ENCODING_PCM_FLOAT -> 4
-                                            android.media.AudioFormat.ENCODING_PCM_24BIT_PACKED -> 3
-                                            android.media.AudioFormat.ENCODING_PCM_32BIT -> 4
-                                            else -> 2
-                                        }
-                                        pcmBuffer.updateFormat(it.sampleRate, channelCount, bytesPerSample)
-                                        android.util.Log.i("PreviewViewModel", "Pre-initialized CircularPcmBuffer with StreamPack AudioConfig: sampleRate=${it.sampleRate}, channels=$channelCount, bytesPerSample=$bytesPerSample")
-
-                                        // Single ExoPlayer instance with pass-through FakeAudioTrack for both A/V
-                                        val renderersFactory = CustomAudioRenderersFactory(application, pcmBuffer)
-                                        val exoPlayerInstance = ExoPlayer
-                                            .Builder(
-                                                application,
-                                                renderersFactory
-                                            )
-                                            .build()
-
-                                        val mediaItem = MediaItem.fromUri("rtmp://localhost:1935/publish/live")
-                                        val mediaSource = ProgressiveMediaSource.Factory(
-                                            DefaultDataSource.Factory(application)
-                                        ).createMediaSource(mediaItem)
-                                        
-                                        exoPlayerInstance.setMediaSource(mediaSource)
-                                        exoPlayerInstance.volume = 0f
-
-                                        val audioRecordWrapper = AudioRecordWrapper3(exoPlayerInstance, pcmBuffer)
-                                        BufferVisualizerModel.circularPcmBuffer = pcmBuffer
-                                        bufferVisualizerModel = BufferVisualizerModel
-                                        bufferVisualizer.startObserving()
-
-                                        streamer.setVideoSource(CustomStreamPackSourceInternal.Factory(exoPlayerInstance))
-                                        streamer.setAudioSource(CustomAudioInput3.Factory(
-                                            audioRecordWrapper,
-                                            bufferVisualizerModel as BufferVisualizerModel
-                                        ))
-                                } ?: Log.i(TAG, "Audio is disabled")
-                            }
-                        }
+                    // For ExoPlayer audio capture, we need MediaProjection permission
+                    // This replaces the complex FakeAudioTrack interception approach
+                    val mediaProjection = mediaProjectionHelper.getMediaProjection()
+                    if (mediaProjection != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                        Log.i(TAG, "Using MediaProjection-based ExoPlayer audio capture")
+                        setupExoPlayerWithMediaProjection(bufferVisualizer, mediaProjection)
+                    } else {
+                        Log.w(TAG, "MediaProjection not available - falling back to complex buffer approach")
+                        // Fallback to the existing complex approach if MediaProjection is not available
+                        setupComplexAudioCapture(bufferVisualizer)
+                    }
                 }
-//                is IBitmapSource -> {
-//                    CameraSourceFactory()
-//                }
-//                is CustomStreamPackSourceInternal -> {
-//                    streamer.setVideoSource(CameraSourceFactory())
-//                    streamer.setAudioSource(MicrophoneSourceFactory())
-//                }
                 else -> {
-//                    Log.i(TAG, "Unknown video source. Fallback to camera sources")
+                    // Switching back to camera - clean up MediaProjection and buffers
                     bufferVisualizer.stopObserving()
                     BufferVisualizerModel.circularPcmBuffer = null
                     bufferVisualizerModel = null
+                    
+                    // Release MediaProjection resources
+                    mediaProjectionHelper.release()
+                    
                     streamer.setVideoSource(CameraSourceFactory())
                     streamer.setAudioSource(MicrophoneSourceFactory())
                 }
             }
             Log.i(TAG, "Switch video source to $nextSource")
         }
+    }
+
+    @RequiresPermission(Manifest.permission.CAMERA)
+    fun toggleVideoSourceWithProjection(bufferVisualizer: BufferVisualizerView, mediaProjection: MediaProjection) {
+        val videoSource = streamer.videoInput?.sourceFlow?.value
+        viewModelScope.launch {
+            val nextSource = when (videoSource) {
+                is ICameraSource -> {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                        Log.i(TAG, "Using provided MediaProjection for ExoPlayer audio capture")
+                        setupExoPlayerWithMediaProjection(bufferVisualizer, mediaProjection)
+                    } else {
+                        Log.w(TAG, "MediaProjection requires Android 10+ - falling back to complex buffer approach")
+                        setupComplexAudioCapture(bufferVisualizer)
+                    }
+                }
+                else -> {
+                    // Switching back to camera - clean up MediaProjection and buffers
+                    bufferVisualizer.stopObserving()
+                    BufferVisualizerModel.circularPcmBuffer = null
+                    bufferVisualizerModel = null
+                    
+                    // Release MediaProjection resources
+                    mediaProjectionHelper.release()
+                    
+                    streamer.setVideoSource(CameraSourceFactory())
+                    streamer.setAudioSource(MicrophoneSourceFactory())
+                }
+            }
+            Log.i(TAG, "Switch video source to $nextSource")
+        }
+    }
+
+    private suspend fun setupExoPlayerWithMediaProjection(bufferVisualizer: BufferVisualizerView, mediaProjection: MediaProjection) {
+        // Create ExoPlayer for video
+        val exoPlayerInstance = ExoPlayer.Builder(application).build()
+        val mediaItem = MediaItem.fromUri("rtmp://localhost:1935/publish/live")
+        val mediaSource = ProgressiveMediaSource.Factory(
+            DefaultDataSource.Factory(application)
+        ).createMediaSource(mediaItem)
+        
+        exoPlayerInstance.setMediaSource(mediaSource)
+        exoPlayerInstance.volume = 0f  // Normal volume for MediaProjection to capture
+        
+        // Set video source - ExoPlayer video display
+        streamer.setVideoSource(CustomStreamPackSourceInternal.Factory(exoPlayerInstance))
+        
+        // Set audio source - MediaProjection capturing ExoPlayer's audio output
+        streamer.setAudioSource(MediaProjectionAudioSourceFactory(mediaProjection))
+        
+        Log.i(TAG, "MediaProjection-based ExoPlayer audio/video setup completed")
+    }
+
+    /**
+     * Fallback method for complex audio capture when MediaProjection is not available.
+     * This maintains the existing CircularPcmBuffer + FakeAudioTrack approach.
+     */
+    private suspend fun setupComplexAudioCapture(bufferVisualizer: BufferVisualizerView) {
+        storageRepository.audioConfigFlow
+            .collect { config ->
+                if (ActivityCompat.checkSelfPermission(
+                        application,
+                        Manifest.permission.RECORD_AUDIO
+                    ) == PackageManager.PERMISSION_GRANTED
+                ) {
+                    config?.let {
+                        val bufferSize = AudioRecord.getMinBufferSize(
+                            it.sampleRate,
+                            it.channelConfig,
+                            it.byteFormat
+                        )
+                        val pcmBuffer = CircularPcmBuffer(bufferSize * 2)
+
+                        // Pre-initialize CircularPcmBuffer with correct format from AudioConfig
+                        val channelCount = when (it.channelConfig) {
+                            android.media.AudioFormat.CHANNEL_IN_MONO -> 1
+                            android.media.AudioFormat.CHANNEL_IN_STEREO -> 2
+                            else -> 2
+                        }
+                        val bytesPerSample = when (it.byteFormat) {
+                            android.media.AudioFormat.ENCODING_PCM_8BIT -> 1
+                            android.media.AudioFormat.ENCODING_PCM_16BIT -> 2
+                            android.media.AudioFormat.ENCODING_PCM_FLOAT -> 4
+                            android.media.AudioFormat.ENCODING_PCM_24BIT_PACKED -> 3
+                            android.media.AudioFormat.ENCODING_PCM_32BIT -> 4
+                            else -> 2
+                        }
+                        pcmBuffer.updateFormat(it.sampleRate, channelCount, bytesPerSample)
+                        Log.i(TAG, "Pre-initialized CircularPcmBuffer with StreamPack AudioConfig: sampleRate=${it.sampleRate}, channels=$channelCount, bytesPerSample=$bytesPerSample")
+
+                        // Single ExoPlayer instance with pass-through FakeAudioTrack for both A/V
+                        val renderersFactory = CustomAudioRenderersFactory(application, pcmBuffer)
+                        val exoPlayerInstance = ExoPlayer
+                            .Builder(application, renderersFactory)
+                            .build()
+
+                        val mediaItem = MediaItem.fromUri("rtmp://localhost:1935/publish/live")
+                        val mediaSource = ProgressiveMediaSource.Factory(
+                            DefaultDataSource.Factory(application)
+                        ).createMediaSource(mediaItem)
+
+                        exoPlayerInstance.setMediaSource(mediaSource)
+                        exoPlayerInstance.volume = 0f
+
+                        val audioRecordWrapper = AudioRecordWrapper3(exoPlayerInstance, pcmBuffer)
+                        BufferVisualizerModel.circularPcmBuffer = pcmBuffer
+                        bufferVisualizerModel = BufferVisualizerModel
+                        bufferVisualizer.startObserving()
+
+                        streamer.setVideoSource(CustomStreamPackSourceInternal.Factory(exoPlayerInstance))
+                        streamer.setAudioSource(CustomAudioInput3.Factory(
+                            audioRecordWrapper,
+                            bufferVisualizerModel as BufferVisualizerModel
+                        ))
+                    } ?: Log.i(TAG, "Audio is disabled")
+                }
+            }
     }
 
     val isCameraSource = streamer.videoInput?.sourceFlow?.map { it is ICameraSource }?.asLiveData()

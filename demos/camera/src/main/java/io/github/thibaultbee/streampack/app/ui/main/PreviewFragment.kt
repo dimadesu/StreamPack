@@ -17,13 +17,16 @@ package io.github.thibaultbee.streampack.app.ui.main
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.media.projection.MediaProjection
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ToggleButton
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresPermission
 import androidx.fragment.app.Fragment
@@ -36,9 +39,11 @@ import io.github.thibaultbee.streampack.app.ApplicationConstants
 import io.github.thibaultbee.streampack.app.R
 import io.github.thibaultbee.streampack.app.databinding.MainFragmentBinding
 import io.github.thibaultbee.streampack.app.utils.DialogUtils
+import io.github.thibaultbee.streampack.app.utils.MediaProjectionHelper
 import io.github.thibaultbee.streampack.app.utils.PermissionManager
 import io.github.thibaultbee.streampack.core.interfaces.IStreamer
 import io.github.thibaultbee.streampack.core.interfaces.IWithVideoSource
+import io.github.thibaultbee.streampack.core.elements.sources.video.camera.ICameraSource
 import io.github.thibaultbee.streampack.core.streamers.lifecycle.StreamerViewModelLifeCycleObserver
 import io.github.thibaultbee.streampack.core.streamers.single.SingleStreamer
 import io.github.thibaultbee.streampack.ui.views.PreviewView
@@ -51,8 +56,18 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
         PreviewViewModelFactory(requireActivity().application)
     }
 
+    // MediaProjection permission launcher - connects to MediaProjectionHelper
+    private lateinit var mediaProjectionLauncher: ActivityResultLauncher<Intent>
+
     override fun onDestroyView() {
         super.onDestroyView()
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        
+        // Initialize MediaProjection launcher with helper
+        mediaProjectionLauncher = previewViewModel.mediaProjectionHelper.registerLauncher(this)
     }
 
     override fun onCreateView(
@@ -82,7 +97,27 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
 
         binding.switchSourceButton.setOnClickListener {
             binding.bufferVisualizer.previewViewModel = previewViewModel
-            previewViewModel.toggleVideoSource(binding.bufferVisualizer)
+            
+            // Check if we're switching to ExoPlayer source (which needs MediaProjection)
+            val currentVideoSource = previewViewModel.streamer.videoInput?.sourceFlow?.value
+            if (currentVideoSource is ICameraSource) {
+                // About to switch to ExoPlayer - request MediaProjection permission
+                Log.i(TAG, "Switching to ExoPlayer source - requesting MediaProjection permission")
+                val helper = previewViewModel.mediaProjectionHelper
+                helper.requestProjection(mediaProjectionLauncher) { mediaProjection: MediaProjection? ->
+                    if (mediaProjection != null) {
+                        Log.i(TAG, "MediaProjection permission granted - proceeding with source switch")
+                        // Pass the MediaProjection directly to avoid lookup issues
+                        previewViewModel.toggleVideoSourceWithProjection(binding.bufferVisualizer, mediaProjection)
+                    } else {
+                        Log.w(TAG, "MediaProjection permission denied - cannot switch to ExoPlayer audio capture")
+                        showError("Permission Required", "MediaProjection permission is required for ExoPlayer audio capture")
+                    }
+                }
+            } else {
+                // Switching back to camera - no special permission needed
+                previewViewModel.toggleVideoSource(binding.bufferVisualizer)
+            }
         }
 
         previewViewModel.streamerErrorLiveData.observe(viewLifecycleOwner) {
