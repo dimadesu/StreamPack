@@ -102,10 +102,14 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             if (!isReallyStreaming && !isTryingConnection) {
                 // Not streaming and not trying - start stream
                 Log.d(TAG, "Starting stream...")
+                // Set button to "Stop" immediately and keep it there
+                view.isChecked = true
                 startStreamIfPermissions(previewViewModel.requiredPermissions)
             } else if (isReallyStreaming || isTryingConnection) {
                 // Streaming or trying to connect - stop stream
                 Log.d(TAG, "Stopping stream...")
+                // Set button to "Start" immediately
+                view.isChecked = false
                 stopStream()
             } else {
                 Log.w(TAG, "Uncertain state - button clicked but unclear action needed")
@@ -131,11 +135,16 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             Log.d(TAG, "Streaming state changed to: $isStreaming")
             if (isStreaming) {
                 lockOrientation()
-                binding.liveButton.isChecked = true
+                // Ensure button shows "Stop" when definitely streaming
+                if (!binding.liveButton.isChecked) {
+                    Log.d(TAG, "Streaming confirmed - ensuring button shows Stop")
+                    binding.liveButton.isChecked = true
+                }
             } else {
                 unlockOrientation()
-                // Only set to false if we're not trying to connect
-                if (previewViewModel.isTryingConnectionLiveData.value != true) {
+                // Only set to "Start" if we're not in a connecting state
+                if (previewViewModel.isTryingConnectionLiveData.value != true && binding.liveButton.isChecked) {
+                    Log.d(TAG, "Streaming stopped and not trying - ensuring button shows Start")
                     binding.liveButton.isChecked = false
                 }
             }
@@ -143,14 +152,7 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
 
         previewViewModel.isTryingConnectionLiveData.observe(viewLifecycleOwner) { isWaitingForConnection ->
             Log.d(TAG, "Trying connection state changed to: $isWaitingForConnection")
-            if (isWaitingForConnection) {
-                binding.liveButton.isChecked = true
-            } else {
-                // Only set to false if we're not actually streaming
-                if (previewViewModel.isStreamingLiveData.value != true) {
-                    binding.liveButton.isChecked = false
-                }
-            }
+            // Don't change button state here - let the click handler manage it
         }
 
         previewViewModel.streamerLiveData.observe(viewLifecycleOwner) { streamer ->
@@ -190,6 +192,25 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
 
     private fun stopStream() {
         previewViewModel.stopStream()
+    }
+
+    private fun updateButtonState() {
+        val isStreaming = previewViewModel.isStreamingLiveData.value == true
+        val isTrying = previewViewModel.isTryingConnectionLiveData.value == true
+        val currentButtonState = binding.liveButton.isChecked
+        
+        // Button should be checked (show "Stop") if streaming OR trying to connect
+        val shouldBeChecked = isStreaming || isTrying
+        
+        Log.d(TAG, "updateButtonState: isStreaming=$isStreaming, isTrying=$isTrying, currentButton=$currentButtonState, shouldBeChecked=$shouldBeChecked")
+        
+        // Only update if state actually changed to prevent unnecessary flicker
+        if (currentButtonState != shouldBeChecked) {
+            Log.d(TAG, "updateButtonState: CHANGING button from $currentButtonState to $shouldBeChecked")
+            binding.liveButton.isChecked = shouldBeChecked
+        } else {
+            Log.d(TAG, "updateButtonState: button already in correct state, no change")
+        }
     }
 
     private fun showPermissionError(vararg permissions: String) {
