@@ -19,6 +19,7 @@ import android.app.Notification
 import android.content.Context
 import android.media.projection.MediaProjection
 import android.os.Bundle
+import android.util.Log
 import io.github.thibaultbee.streampack.app.R
 import io.github.thibaultbee.streampack.core.streamers.single.ISingleStreamer
 import io.github.thibaultbee.streampack.core.streamers.single.SingleStreamer
@@ -85,6 +86,20 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
         }
         // For Android 13 and below, the base class MEDIA_PROJECTION type should work
         // Camera access in background may be more limited but should still work with proper manifest declaration
+        
+        Log.i(TAG, "CameraStreamerService created and configured for background camera access")
+    }
+
+    override fun onStreamingStop() {
+        // Override the base class behavior to NOT stop the service when streaming stops
+        // This allows the service to remain running for quick restart of streaming
+        Log.i(TAG, "Streaming stopped but service remains active for background operation")
+        
+        // Update notification to show stopped state
+        onCloseNotification()?.let { notification ->
+            customNotificationUtils.notify(notification)
+        }
+        // Intentionally NOT calling stopSelf() here - let the service stay alive
     }
 
     /**

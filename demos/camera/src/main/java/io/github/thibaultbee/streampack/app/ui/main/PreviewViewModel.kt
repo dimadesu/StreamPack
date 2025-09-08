@@ -189,7 +189,9 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 Log.d(TAG, "isStreamingLiveData: using streamingFlow = $streamingFlow, current value = ${streamingFlow.value}")
                 streamingFlow
             } else {
-                Log.d(TAG, "isStreamingLiveData: service not ready, returning false")
+                // When service is not ready, we don't know the streaming state
+                // Return false for now, but this will update once service reconnects
+                Log.d(TAG, "isStreamingLiveData: service not ready, returning false (will update on reconnect)")
                 kotlinx.coroutines.flow.flowOf(false)
             }
         }.asLiveData()
@@ -205,20 +207,23 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         super.onCleared()
         
         // Always unbind from the service - since we started it independently, 
-        // unbinding won't destroy it
+        // unbinding won't destroy it and it should continue streaming in background
         serviceConnection?.let { connection ->
             application.unbindService(connection)
-            Log.i(TAG, "Unbound from CameraStreamerService")
+            Log.i(TAG, "Unbound from CameraStreamerService - service continues running independently")
         }
+        
+        // Don't clear service state - the service should continue running independently
+        // Only clear the ViewModel's local references
         streamerService = null
         serviceConnection = null
-        _serviceReady.value = false
+        // DO NOT set _serviceReady.value = false here - the service is still running!
         
         // Clean up MediaProjection resources
         streamingMediaProjection?.stop()
         streamingMediaProjection = null
         mediaProjectionHelper.release()
-        Log.i(TAG, "PreviewViewModel cleared and MediaProjection released")
+        Log.i(TAG, "PreviewViewModel cleared but service continues running for background streaming")
     }
 
     init {
@@ -313,14 +318,16 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     
     /**
      * Bind to the CameraStreamerService for background streaming.
+     * This handles both starting a new service and reconnecting to an existing one.
      */
     private fun bindToStreamerService() {
         Log.i(TAG, "Binding to CameraStreamerService...")
         
         // Start the service explicitly so it runs independently of binding
+        // If service is already running, this will just reconnect to it
         val serviceIntent = Intent(application, CameraStreamerService::class.java)
         application.startForegroundService(serviceIntent)
-        Log.i(TAG, "Started CameraStreamerService as independent foreground service")
+        Log.i(TAG, "Started/reconnected to CameraStreamerService as independent foreground service")
         
         serviceConnection = StreamerService.bindService(
             context = application,
@@ -329,12 +336,18 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 serviceStreamer = streamer as SingleStreamer
                 streamerFlow.value = serviceStreamer
                 _serviceReady.value = true
-                Log.i(TAG, "CameraStreamerService connected and ready")
+                Log.i(TAG, "CameraStreamerService connected and ready - streaming state: ${streamer.isStreamingFlow.value}")
+                
+                // If service was already streaming when we reconnected, this will be reflected
+                // in the streamer's isStreamingFlow automatically
             },
             onServiceDisconnected = { name ->
                 Log.w(TAG, "CameraStreamerService disconnected: $name")
+                // Don't set serviceReady to false immediately on disconnect
+                // The service might still be running, just temporarily disconnected
                 serviceStreamer = null
                 streamerFlow.value = null
+                // Only set serviceReady to false if this is a permanent disconnection
                 _serviceReady.value = false
             }
         )
