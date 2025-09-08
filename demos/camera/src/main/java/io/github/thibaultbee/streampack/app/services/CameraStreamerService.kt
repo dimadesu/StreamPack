@@ -15,6 +15,7 @@
  */
 package io.github.thibaultbee.streampack.app.services
 
+import android.app.Notification
 import android.content.Context
 import android.media.projection.MediaProjection
 import android.os.Bundle
@@ -58,6 +59,11 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
     }
 
     private val _serviceReady = MutableStateFlow(false)
+    
+    // Create our own NotificationUtils instance for custom notifications
+    private val customNotificationUtils: NotificationUtils by lazy {
+        NotificationUtils(this, "camera_streaming_channel", 1001)
+    }
 
     /**
      * Override onCreate to use both camera and mediaProjection service types
@@ -184,5 +190,38 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
         } catch (e: Exception) {
             false
         }
+    }
+    
+    override fun onCreateNotification(): Notification {
+        return customNotificationUtils.createNotification(
+            getString(R.string.service_notification_title),
+            getString(R.string.service_notification_text_created),
+            R.drawable.ic_baseline_linked_camera_24
+        )
+    }
+
+    override fun onOpenNotification(): Notification? {
+        return customNotificationUtils.createNotification(
+            getString(R.string.service_notification_title),
+            getString(R.string.service_notification_text_streaming),
+            R.drawable.ic_baseline_linked_camera_24
+        )
+    }
+
+    override fun onErrorNotification(t: Throwable): Notification? {
+        val errorMessage = getString(R.string.service_notification_text_error, t.message ?: "Unknown error")
+        return customNotificationUtils.createNotification(
+            getString(R.string.service_notification_title),
+            errorMessage,
+            R.drawable.ic_baseline_linked_camera_24
+        )
+    }
+
+    override fun onCloseNotification(): Notification? {
+        return customNotificationUtils.createNotification(
+            getString(R.string.service_notification_title),
+            getString(R.string.service_notification_text_stopped),
+            R.drawable.ic_baseline_linked_camera_24
+        )
     }
 }

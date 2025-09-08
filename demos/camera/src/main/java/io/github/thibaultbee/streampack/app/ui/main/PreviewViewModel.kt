@@ -26,6 +26,7 @@ import android.graphics.BitmapFactory
 import android.hardware.camera2.CaptureResult
 import android.media.AudioRecord
 import android.media.projection.MediaProjection
+import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.CameraSettings
@@ -153,6 +154,11 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 if (it is UriMediaDescriptor) {
                     permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
                 }
+            }
+            
+            // Add notification permission for Android 13+ (API 33+)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                permissions.add(Manifest.permission.POST_NOTIFICATIONS)
             }
 
             return permissions
