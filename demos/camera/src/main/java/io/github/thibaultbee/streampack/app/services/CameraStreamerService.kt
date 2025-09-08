@@ -15,8 +15,10 @@
  */
 package io.github.thibaultbee.streampack.app.services
 
+import android.content.Context
 import android.media.projection.MediaProjection
 import android.os.Bundle
+import io.github.thibaultbee.streampack.app.R
 import io.github.thibaultbee.streampack.core.streamers.single.ISingleStreamer
 import io.github.thibaultbee.streampack.core.streamers.single.SingleStreamer
 import io.github.thibaultbee.streampack.core.interfaces.IWithVideoSource
@@ -25,7 +27,11 @@ import io.github.thibaultbee.streampack.core.elements.sources.audio.IAudioSource
 import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoSourceInternal
 import io.github.thibaultbee.streampack.services.StreamerService
 import io.github.thibaultbee.streampack.services.utils.SingleStreamerFactory
-import io.github.thibaultbee.streampack.app.R
+import io.github.thibaultbee.streampack.services.utils.StreamerFactory
+import android.content.pm.ServiceInfo
+import android.os.Build
+import androidx.core.app.ServiceCompat
+import io.github.thibaultbee.streampack.services.utils.NotificationUtils
 import io.github.thibaultbee.streampack.core.configuration.mediadescriptor.MediaDescriptor
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,14 +48,38 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
         defaultRotation = 0  // Provide default rotation since service context has no display
     ),
     notificationId = 1001,
-    channelId = "camera_service", 
-    channelNameResourceId = R.string.app_name
+    channelId = "camera_streaming_channel", 
+    channelNameResourceId = R.string.streaming_channel_name,
+    channelDescriptionResourceId = R.string.streaming_channel_description,
+    notificationIconResourceId = R.drawable.ic_baseline_linked_camera_24
 ) {
     companion object {
         const val TAG = "CameraStreamerService"
     }
 
     private val _serviceReady = MutableStateFlow(false)
+
+    /**
+     * Override onCreate to use both camera and mediaProjection service types
+     */
+    override fun onCreate() {
+        // Let the base class handle most of the setup first
+        super.onCreate()
+        
+        // The base class already calls startForeground with MEDIA_PROJECTION type,
+        // but we need to update it with CAMERA type for Android 14+ to enable background camera access
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            // Android 14+ supports both camera and media projection service types
+            ServiceCompat.startForeground(
+                this,
+                1001, // Use the same notification ID as specified in constructor
+                onCreateNotification(),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+            )
+        }
+        // For Android 13 and below, the base class MEDIA_PROJECTION type should work
+        // Camera access in background may be more limited but should still work with proper manifest declaration
+    }
 
     /**
      * Required implementation of abstract method

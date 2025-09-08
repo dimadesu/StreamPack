@@ -44,6 +44,7 @@ import io.github.thibaultbee.streampack.app.utils.PermissionManager
 import io.github.thibaultbee.streampack.core.interfaces.IStreamer
 import io.github.thibaultbee.streampack.core.interfaces.IWithVideoSource
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.ICameraSource
+import io.github.thibaultbee.streampack.core.elements.sources.video.IPreviewableSource
 import io.github.thibaultbee.streampack.core.streamers.lifecycle.StreamerViewModelLifeCycleObserver
 import io.github.thibaultbee.streampack.core.streamers.single.SingleStreamer
 import io.github.thibaultbee.streampack.ui.views.PreviewView
@@ -185,9 +186,27 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
     }
 
     private fun startStream() {
-        Log.d(TAG, "startStream() called - starting with service streamer")
-        // Use the main startStream method which handles service integration properly
-        previewViewModel.startStream()
+        Log.d(TAG, "startStream() called - checking if MediaProjection is required")
+        
+        // Check if MediaProjection is required for this streaming setup
+        if (previewViewModel.requiresMediaProjection()) {
+            Log.d(TAG, "MediaProjection required - using startStreamWithMediaProjection")
+            // Use MediaProjection-enabled streaming for RTMP sources
+            previewViewModel.startStreamWithMediaProjection(
+                mediaProjectionLauncher,
+                onSuccess = {
+                    Log.d(TAG, "MediaProjection stream started successfully")
+                },
+                onError = { error ->
+                    Log.e(TAG, "MediaProjection stream failed: $error")
+                    showError("Streaming Error", error)
+                }
+            )
+        } else {
+            Log.d(TAG, "Regular streaming - using standard startStream")
+            // Use the main startStream method for camera sources
+            previewViewModel.startStream()
+        }
     }
 
     private fun stopStream() {
@@ -231,7 +250,42 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
 
     override fun onPause() {
         super.onPause()
-        stopStream()
+        // DO NOT stop streaming when going to background - the service should continue streaming
+        // DO NOT stop preview either when the camera is being used for streaming -
+        // the camera source is shared between preview and streaming, so stopping preview
+        // would also stop the streaming. Instead, let the preview continue running.
+        Log.d(TAG, "onPause() - app going to background, keeping both preview and stream active via service")
+        
+        // Note: We used to stop preview here, but that was causing streaming to stop
+        // because the camera source is shared. For background streaming to work properly,
+        // we need to keep the camera active.
+    }
+
+    override fun onResume() {
+        super.onResume()
+        Log.d(TAG, "onResume() - app returning to foreground, preview should already be active")
+        
+        // Since we no longer stop preview in onPause(), the preview should still be running
+        // We only need to ensure preview is started if it's not already running
+        if (PermissionManager.hasPermissions(requireContext(), Manifest.permission.CAMERA)) {
+            val streamer = previewViewModel.streamerLiveData.value
+            if (streamer is SingleStreamer) {
+                lifecycleScope.launch {
+                    try {
+                        // Check if preview is already running before trying to start it
+                        val videoSource = (streamer as? IWithVideoSource)?.videoInput?.sourceFlow?.value
+                        if (videoSource is IPreviewableSource && !videoSource.isPreviewingFlow.value) {
+                            binding.preview.startPreview()
+                            Log.d(TAG, "Preview restarted for foreground mode")
+                        } else {
+                            Log.d(TAG, "Preview was already running")
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Error ensuring preview is running: ${e.message}")
+                    }
+                }
+            }
+        }
     }
 
     @RequiresPermission(Manifest.permission.CAMERA)

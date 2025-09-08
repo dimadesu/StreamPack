@@ -158,6 +158,16 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             return permissions
         }
 
+    /**
+     * Determines if MediaProjection is required for the current streaming setup.
+     * MediaProjection is needed when streaming from RTMP source for audio capture.
+     */
+    fun requiresMediaProjection(): Boolean {
+        val currentVideoSource = serviceStreamer?.videoInput?.sourceFlow?.value
+        // If video source is not a camera source, it's likely RTMP and needs MediaProjection for audio
+        return currentVideoSource != null && currentVideoSource !is ICameraSource
+    }
+
     // Streamer errors
     private val _streamerErrorLiveData: MutableLiveData<String> = MutableLiveData()
     val streamerErrorLiveData: LiveData<String> = _streamerErrorLiveData
@@ -188,7 +198,8 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     override fun onCleared() {
         super.onCleared()
         
-        // Unbind from streaming service
+        // Always unbind from the service - since we started it independently, 
+        // unbinding won't destroy it
         serviceConnection?.let { connection ->
             application.unbindService(connection)
             Log.i(TAG, "Unbound from CameraStreamerService")
@@ -227,6 +238,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     private suspend fun startServiceStreaming(descriptor: MediaDescriptor): Boolean {
         return try {
             Log.i(TAG, "startServiceStreaming: Opening streamer with descriptor: $descriptor")
+            
             val currentStreamer = serviceStreamer
             if (currentStreamer == null) {
                 Log.e(TAG, "startServiceStreaming: serviceStreamer is null!")
@@ -268,6 +280,12 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             Log.i(TAG, "stopServiceStreaming: Stopping stream...")
             serviceStreamer?.stopStream()
             Log.i(TAG, "stopServiceStreaming: Stream stopped successfully")
+            
+            // Stop the foreground service since streaming has ended
+            val serviceIntent = Intent(application, CameraStreamerService::class.java)
+            application.stopService(serviceIntent)
+            Log.i(TAG, "stopServiceStreaming: Stopped CameraStreamerService foreground service")
+            
             true
         } catch (e: Exception) {
             Log.e(TAG, "stopServiceStreaming failed: ${e.message}", e)
@@ -292,6 +310,11 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
      */
     private fun bindToStreamerService() {
         Log.i(TAG, "Binding to CameraStreamerService...")
+        
+        // Start the service explicitly so it runs independently of binding
+        val serviceIntent = Intent(application, CameraStreamerService::class.java)
+        application.startForegroundService(serviceIntent)
+        Log.i(TAG, "Started CameraStreamerService as independent foreground service")
         
         serviceConnection = StreamerService.bindService(
             context = application,

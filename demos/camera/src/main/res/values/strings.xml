@@ -5,7 +5,8 @@
     <string name="menu_actions">Menu actions</string>
 
     <!-- Camera Streaming Service -->
-    <string name="camera_streaming_channel_name">Camera Streaming</string>
+    <string name="streaming_channel_name">Camera Streaming</string>
+    <string name="streaming_channel_description">Notification channel for camera streaming service</string>
 
     <!-- Preview -->
     <string name="live">Start Live</string>
