@@ -28,6 +28,9 @@ import android.media.AudioRecord
 import android.media.projection.MediaProjection
 import android.os.IBinder
 import android.util.Log
+import io.github.thibaultbee.streampack.core.elements.sources.video.camera.CameraSettings
+import io.github.thibaultbee.streampack.core.elements.sources.video.camera.ICameraSource
+import io.github.thibaultbee.streampack.core.interfaces.IWithVideoRotation
 import android.util.Range
 import android.util.Rational
 import androidx.annotation.RequiresPermission
@@ -59,16 +62,21 @@ import io.github.thibaultbee.streampack.core.configuration.mediadescriptor.UriMe
 import io.github.thibaultbee.streampack.core.elements.endpoints.MediaSinkType
 import io.github.thibaultbee.streampack.core.elements.sources.audio.audiorecord.IAudioRecordSource
 import io.github.thibaultbee.streampack.core.elements.sources.audio.audiorecord.MicrophoneSourceFactory
-import io.github.thibaultbee.streampack.core.elements.sources.video.camera.CameraSettings
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.CameraSourceFactory
-import io.github.thibaultbee.streampack.core.elements.sources.video.camera.ICameraSource
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.extensions.isFrameRateSupported
-import io.github.thibaultbee.streampack.core.interfaces.IWithVideoSource
 import io.github.thibaultbee.streampack.core.elements.sources.audio.audiorecord.MediaProjectionAudioSourceFactory
 import io.github.thibaultbee.streampack.core.interfaces.startStream
 import io.github.thibaultbee.streampack.core.streamers.single.SingleStreamer
 import io.github.thibaultbee.streampack.core.utils.extensions.isClosedException
 import io.github.thibaultbee.streampack.ext.srt.regulator.controllers.DefaultSrtBitrateRegulatorController
+import io.github.thibaultbee.streampack.core.interfaces.IWithAudioSource
+import io.github.thibaultbee.streampack.core.interfaces.IWithVideoSource
+import io.github.thibaultbee.streampack.core.elements.sources.audio.IAudioSourceInternal
+import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoSourceInternal
+import io.github.thibaultbee.streampack.core.configuration.mediadescriptor.MediaDescriptor
+import io.github.thibaultbee.streampack.core.streamers.single.ISingleStreamer
+import io.github.thibaultbee.streampack.app.services.CameraStreamerService
+import io.github.thibaultbee.streampack.services.StreamerService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
@@ -76,7 +84,12 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.TimeoutCancellationException
+
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 
 
 class PreviewViewModel(private val application: Application) : ObservableViewModel() {
@@ -85,10 +98,30 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     val mediaProjectionHelper = MediaProjectionHelper(application)
     private val buildStreamerUseCase = BuildStreamerUseCase(application, storageRepository)
 
-    private val streamerFlow = MutableStateFlow(buildStreamerUseCase())
-    val streamer: SingleStreamer
-        get() = streamerFlow.value
-    val streamerLiveData = streamerFlow.asLiveData()
+    // Service binding for background streaming
+    /**
+     * Service reference for background streaming (using the service abstraction)
+     */
+    private var streamerService: CameraStreamerService? = null
+    
+    /**
+     * Current streamer instance from the service
+     */
+    var serviceStreamer: SingleStreamer? = null
+        private set
+    private var serviceConnection: ServiceConnection? = null
+    private val _serviceReady = MutableStateFlow(false)
+    private val streamerFlow = MutableStateFlow<SingleStreamer?>(null)
+    
+    // Streamer access through service (with fallback for backward compatibility)
+    val streamer: SingleStreamer?
+        get() = serviceStreamer
+    
+    // Service readiness for UI binding
+    val serviceReadyFlow = _serviceReady
+    val streamerLiveData = serviceReadyFlow.map { ready ->
+        if (ready) serviceStreamer else null
+    }.asLiveData()
 
     /**
      * Test bitmap for [BitmapSource].
@@ -99,19 +132,21 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     /**
      * Camera settings.
      */
-    private val cameraSettings: CameraSettings?
+    val cameraSettings: CameraSettings?
         get() {
-            val videoSource = (streamer as? IWithVideoSource)?.videoInput?.sourceFlow?.value
+            val currentStreamer = serviceStreamer
+            val videoSource = (currentStreamer as? IWithVideoSource)?.videoInput?.sourceFlow?.value
             return (videoSource as? ICameraSource)?.settings
         }
 
     val requiredPermissions: List<String>
         get() {
             val permissions = mutableListOf<String>()
-            if (streamer.videoInput?.sourceFlow is ICameraSource) {
+            val currentStreamer = serviceStreamer
+            if (currentStreamer?.videoInput?.sourceFlow is ICameraSource) {
                 permissions.add(Manifest.permission.CAMERA)
             }
-            if (streamer.audioInput?.sourceFlow?.value is IAudioRecordSource) {
+            if (currentStreamer?.audioInput?.sourceFlow?.value is IAudioRecordSource) {
                 permissions.add(Manifest.permission.RECORD_AUDIO)
             }
             storageRepository.endpointDescriptorFlow.asLiveData().value?.let {
@@ -131,7 +166,17 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     // Streamer states
     val isStreamingLiveData: LiveData<Boolean>
-        get() = streamer.isStreamingFlow.asLiveData()
+        get() = serviceReadyFlow.flatMapLatest { ready ->
+            Log.d(TAG, "isStreamingLiveData: serviceReady = $ready, serviceStreamer = $serviceStreamer")
+            if (ready && serviceStreamer != null) {
+                val streamingFlow = serviceStreamer!!.isStreamingFlow
+                Log.d(TAG, "isStreamingLiveData: using streamingFlow = $streamingFlow, current value = ${streamingFlow.value}")
+                streamingFlow
+            } else {
+                Log.d(TAG, "isStreamingLiveData: service not ready, returning false")
+                kotlinx.coroutines.flow.flowOf(false)
+            }
+        }.asLiveData()
     private val _isTryingConnectionLiveData = MutableLiveData<Boolean>()
     val isTryingConnectionLiveData: LiveData<Boolean> = _isTryingConnectionLiveData
 
@@ -142,7 +187,16 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     override fun onCleared() {
         super.onCleared()
-//        application.unbindService(serviceConnection)
+        
+        // Unbind from streaming service
+        serviceConnection?.let { connection ->
+            application.unbindService(connection)
+            Log.i(TAG, "Unbound from CameraStreamerService")
+        }
+        streamerService = null
+        serviceConnection = null
+        _serviceReady.value = false
+        
         // Clean up MediaProjection resources
         streamingMediaProjection?.stop()
         streamingMediaProjection = null
@@ -151,62 +205,194 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     }
 
     init {
+        // Bind to streaming service for background streaming capability
+        bindToStreamerService()
+        
+        // Initialize LiveData flows
         viewModelScope.launch {
-            streamerFlow.collect {
-                // Set audio source and video source
-                if (streamer.withAudio) {
-                    Log.i(TAG, "Audio source is enabled. Setting audio source")
-                    streamer.setAudioSource(MicrophoneSourceFactory())
-
+            serviceReadyFlow.collect { isReady ->
+                if (isReady && serviceStreamer != null) {
+                    Log.i(TAG, "Service ready and serviceStreamer available - initializing sources")
+                    initializeStreamerSources()
                 } else {
-                    Log.i(TAG, "Audio source is disabled")
-                }
-                if (streamer.withVideo) {
-                    if (ActivityCompat.checkSelfPermission(
-                            application,
-                            Manifest.permission.CAMERA
-                        ) == PackageManager.PERMISSION_GRANTED
-                    ) {
-                        streamer.setVideoSource(CameraSourceFactory())
-                    }
-                } else {
-                    Log.i(TAG, "Video source is disabled")
+                    Log.i(TAG, "Service ready: $isReady, serviceStreamer: ${serviceStreamer != null}")
                 }
             }
         }
+    }
+
+    /**
+     * Helper functions to interact with streamer directly (service compatibility layer)
+     */
+    private suspend fun startServiceStreaming(descriptor: MediaDescriptor): Boolean {
+        return try {
+            Log.i(TAG, "startServiceStreaming: Opening streamer with descriptor: $descriptor")
+            val currentStreamer = serviceStreamer
+            if (currentStreamer == null) {
+                Log.e(TAG, "startServiceStreaming: serviceStreamer is null!")
+                _streamerErrorLiveData.postValue("Service streamer not available")
+                return false
+            }
+            
+            // Validate RTMP URL format
+            val uri = descriptor.uri.toString()
+            if (uri.startsWith("rtmp://")) {
+                Log.i(TAG, "startServiceStreaming: Attempting RTMP connection to $uri")
+                val host = uri.substringAfter("://").substringBefore("/")
+                Log.i(TAG, "startServiceStreaming: RTMP host: $host")
+            }
+            
+            Log.i(TAG, "startServiceStreaming: serviceStreamer available, calling open()...")
+            
+            // Add timeout to prevent hanging
+            withTimeout(10000) { // 10 second timeout
+                currentStreamer.open(descriptor)
+            }
+            Log.i(TAG, "startServiceStreaming: open() completed, calling startStream()...")
+            currentStreamer.startStream()
+            Log.i(TAG, "startServiceStreaming: Stream started successfully")
+            true
+        } catch (e: TimeoutCancellationException) {
+            Log.e(TAG, "startServiceStreaming failed: Timeout opening connection to ${descriptor.uri}")
+            _streamerErrorLiveData.postValue("Connection timeout - check server address and network")
+            false
+        } catch (e: Exception) {
+            Log.e(TAG, "startServiceStreaming failed: ${e.message}", e)
+            _streamerErrorLiveData.postValue("Stream start failed: ${e.message}")
+            false
+        }
+    }
+    
+    private suspend fun stopServiceStreaming(): Boolean {
+        return try {
+            Log.i(TAG, "stopServiceStreaming: Stopping stream...")
+            serviceStreamer?.stopStream()
+            Log.i(TAG, "stopServiceStreaming: Stream stopped successfully")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "stopServiceStreaming failed: ${e.message}", e)
+            false
+        }
+    }
+    
+    private fun setServiceAudioSource(audioSourceFactory: IAudioSourceInternal.Factory) {
         viewModelScope.launch {
-            streamer.videoInput?.sourceFlow?.collect {
+            serviceStreamer?.setAudioSource(audioSourceFactory)
+        }
+    }
+    
+    private fun setServiceVideoSource(videoSourceFactory: IVideoSourceInternal.Factory) {
+        viewModelScope.launch {
+            serviceStreamer?.setVideoSource(videoSourceFactory)
+        }
+    }
+    
+    /**
+     * Bind to the CameraStreamerService for background streaming.
+     */
+    private fun bindToStreamerService() {
+        Log.i(TAG, "Binding to CameraStreamerService...")
+        
+        serviceConnection = StreamerService.bindService(
+            context = application,
+            serviceClass = CameraStreamerService::class.java,
+            onServiceCreated = { streamer ->
+                serviceStreamer = streamer as SingleStreamer
+                streamerFlow.value = serviceStreamer
+                _serviceReady.value = true
+                Log.i(TAG, "CameraStreamerService connected and ready")
+            },
+            onServiceDisconnected = { name ->
+                Log.w(TAG, "CameraStreamerService disconnected: $name")
+                serviceStreamer = null
+                streamerFlow.value = null
+                _serviceReady.value = false
+            }
+        )
+    }
+
+    /**
+     * Initialize streamer sources after service is ready.
+     */
+    private suspend fun initializeStreamerSources() {
+        val currentStreamer = serviceStreamer ?: return
+        
+        Log.i(TAG, "Initializing streamer sources - Audio enabled: ${currentStreamer.withAudio}, Video enabled: ${currentStreamer.withVideo}")
+        
+        // Set audio source and video source
+        if (currentStreamer.withAudio) {
+            Log.i(TAG, "Audio source is enabled. Setting audio source")
+            setServiceAudioSource(MicrophoneSourceFactory())
+        } else {
+            Log.i(TAG, "Audio source is disabled")
+        }
+        
+        if (currentStreamer.withVideo) {
+            if (ActivityCompat.checkSelfPermission(
+                    application,
+                    Manifest.permission.CAMERA
+                ) == PackageManager.PERMISSION_GRANTED
+            ) {
+                Log.i(TAG, "Camera permission granted, setting video source")
+                setServiceVideoSource(CameraSourceFactory())
+            } else {
+                Log.w(TAG, "Camera permission not granted")
+            }
+        } else {
+            Log.i(TAG, "Video source is disabled")
+        }
+        
+        // Set up flow observers for the service-based streamer
+        observeStreamerFlows()
+    }
+
+    /**
+     * Set up flow observers for streamer state changes.
+     */
+    private fun observeStreamerFlows() {
+        val currentStreamer = serviceStreamer ?: return
+        
+        viewModelScope.launch {
+            currentStreamer.videoInput?.sourceFlow?.collect {
                 notifySourceChanged()
             }
         }
+        
         viewModelScope.launch {
-            streamer.throwableFlow.filterNotNull().filter { !it.isClosedException }
+            currentStreamer.throwableFlow.filterNotNull().filter { !it.isClosedException }
                 .map { "${it.javaClass.simpleName}: ${it.message}" }.collect {
                     _streamerErrorLiveData.postValue(it)
                 }
         }
+        
         viewModelScope.launch {
-            streamer.throwableFlow.filterNotNull().filter { it.isClosedException }
+            currentStreamer.throwableFlow.filterNotNull().filter { it.isClosedException }
                 .map { "Connection lost: ${it.message}" }.collect {
                     _endpointErrorLiveData.postValue(it)
                 }
         }
         viewModelScope.launch {
-            streamer.isOpenFlow
-                .collect {
-                    Log.i(TAG, "Streamer is opened: $it")
+            serviceReadyFlow.collect { isReady ->
+                if (isReady) {
+                    serviceStreamer?.isOpenFlow?.collect {
+                        Log.i(TAG, "Streamer is opened: $it")
+                    }
                 }
+            }
         }
         viewModelScope.launch {
-            streamer.isStreamingFlow
-                .collect {
-                    Log.i(TAG, "Streamer is streaming: $it")
+            serviceReadyFlow.collect { isReady ->
+                if (isReady) {
+                    serviceStreamer?.isStreamingFlow?.collect {
+                        Log.i(TAG, "Streamer is streaming: $it")
+                    }
                 }
+            }
         }
         viewModelScope.launch {
             rotationRepository.rotationFlow
                 .collect {
-                    streamer.setTargetRotation(it)
+                    serviceStreamer?.setTargetRotation(it)
                 }
         }
         viewModelScope.launch {
@@ -216,7 +402,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 val previousStreamer = streamer
                 streamerFlow.emit(buildStreamerUseCase(previousStreamer))
                 if (previousStreamer != streamer) {
-                    previousStreamer.release()
+                    previousStreamer?.release()
                 }
             }
         }
@@ -230,7 +416,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                     ) {
                         config?.let {
                             //
-                            streamer.setAudioConfig(it)
+                            serviceStreamer?.setAudioConfig(it)
                         } ?: Log.i(TAG, "Audio is disabled")
                     }
                 }
@@ -239,7 +425,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             storageRepository.videoConfigFlow
                 .collect { config ->
                     config?.let {
-                        streamer.setVideoConfig(it)
+                        serviceStreamer?.setVideoConfig(it)
                     } ?: Log.i(TAG, "Video is disabled")
                 }
         }
@@ -253,7 +439,9 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     fun configureAudio() {
         viewModelScope.launch {
             try {
-                storageRepository.audioConfigFlow.first()?.let { streamer.setAudioConfig(it) }
+                storageRepository.audioConfigFlow.first()?.let { 
+                    serviceStreamer?.setAudioConfig(it)
+                }
                     ?: Log.i(
                         TAG,
                         "Audio is disabled"
@@ -268,8 +456,9 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     fun initializeVideoSource() {
         viewModelScope.launch {
-            if (streamer.videoInput?.sourceFlow?.value == null) {
-                streamer.setVideoSource(CameraSourceFactory())
+            val currentStreamer = serviceStreamer
+            if (currentStreamer?.videoInput?.sourceFlow?.value == null) {
+                currentStreamer?.setVideoSource(CameraSourceFactory())
             } else {
                 Log.i(TAG, "Camera source already set")
             }
@@ -278,18 +467,49 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     fun startStream() {
         viewModelScope.launch {
+            Log.i(TAG, "startStream() called")
+            val currentStreamer = serviceStreamer
+            val serviceReady = _serviceReady.value
+            
+            Log.i(TAG, "startStream: serviceStreamer = $currentStreamer, serviceReady = $serviceReady")
+            
+            if (currentStreamer == null) {
+                Log.w(TAG, "Service streamer not ready, cannot start stream")
+                _streamerErrorLiveData.postValue("Streaming service not ready")
+                return@launch
+            }
+            
+            // Check if sources are configured
+            val hasVideoSource = currentStreamer.videoInput?.sourceFlow?.value != null
+            val hasAudioSource = currentStreamer.audioInput?.sourceFlow?.value != null
+            Log.i(TAG, "startStream: hasVideoSource = $hasVideoSource, hasAudioSource = $hasAudioSource")
+            
+            if (!hasVideoSource) {
+                Log.w(TAG, "Video source not configured, initializing...")
+                // Try to initialize sources before streaming
+                initializeStreamerSources()
+                // Small delay to let initialization complete
+                kotlinx.coroutines.delay(500)
+            }
+            
             _isTryingConnectionLiveData.postValue(true)
             try {
                 val descriptor = storageRepository.endpointDescriptorFlow.first()
-                Log.i(TAG, "Calling streamer.startStream with descriptor: $descriptor")
-                streamer.startStream(descriptor)
+                Log.i(TAG, "Starting stream with descriptor: $descriptor")
+                val success = startServiceStreaming(descriptor)
+                if (!success) {
+                    Log.e(TAG, "Stream start failed - startServiceStreaming returned false")
+                    _streamerErrorLiveData.postValue("Failed to start stream")
+                    return@launch
+                }
+                Log.i(TAG, "Stream started successfully")
 
                 if (descriptor.type.sinkType == MediaSinkType.SRT) {
                     val bitrateRegulatorConfig =
                         storageRepository.bitrateRegulatorConfigFlow.first()
                     if (bitrateRegulatorConfig != null) {
                         Log.i(TAG, "Add bitrate regulator controller")
-                        streamer.addBitrateRegulatorController(
+                        currentStreamer.addBitrateRegulatorController(
                             DefaultSrtBitrateRegulatorController.Factory(
                                 bitrateRegulatorConfig = bitrateRegulatorConfig
                             )
@@ -326,23 +546,23 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                     try {
                         Log.i(TAG, "About to check video source for audio setup...")
                         // Check if we're on RTMP source - only use MediaProjection audio for RTMP
-                        val currentVideoSource = streamer.videoInput?.sourceFlow?.value
+                        val currentVideoSource = serviceStreamer?.videoInput?.sourceFlow?.value
                         Log.i(TAG, "Current video source: $currentVideoSource (isICameraSource: ${currentVideoSource is ICameraSource})")
                         if (currentVideoSource !is ICameraSource) {
                             // We're on RTMP source - use MediaProjection for audio capture
                             Log.i(TAG, "RTMP source detected - setting up MediaProjection audio capture")
                             try {
-                                streamer.setAudioSource(MediaProjectionAudioSourceFactory(mediaProjection))
+                                setServiceAudioSource(MediaProjectionAudioSourceFactory(mediaProjection))
                                 Log.i(TAG, "MediaProjection audio source configured for RTMP streaming")
                             } catch (audioError: Exception) {
                                 Log.w(TAG, "MediaProjection audio setup failed, falling back to microphone: ${audioError.message}")
                                 // Fallback to microphone if MediaProjection audio fails
-                                streamer.setAudioSource(MicrophoneSourceFactory())
+                                setServiceAudioSource(MicrophoneSourceFactory())
                             }
                         } else {
                             // We're on Camera source - use microphone for audio
                             Log.i(TAG, "Camera source detected - using microphone for audio")
-                            streamer.setAudioSource(MicrophoneSourceFactory())
+                            setServiceAudioSource(MicrophoneSourceFactory())
                         }
                         
                         // Start the actual stream
@@ -369,15 +589,16 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             try {
                 val descriptor = storageRepository.endpointDescriptorFlow.first()
                 Log.i(TAG, "Starting stream with descriptor: $descriptor")
-                Log.i(TAG, "About to call streamer.startStream()...")
-                streamer.startStream(descriptor)
-                Log.i(TAG, "streamer.startStream() completed successfully")
+                Log.i(TAG, "About to call startServiceStreaming()...")
+                startServiceStreaming(descriptor)
+                Log.i(TAG, "startServiceStreaming() completed successfully")
 
                 if (descriptor.type.sinkType == MediaSinkType.SRT) {
                     val bitrateRegulatorConfig = storageRepository.bitrateRegulatorConfigFlow.first()
                     if (bitrateRegulatorConfig != null) {
                         Log.i(TAG, "Add bitrate regulator controller")
-                        streamer.addBitrateRegulatorController(
+                        val currentStreamer = serviceStreamer
+                        currentStreamer?.addBitrateRegulatorController(
                             DefaultSrtBitrateRegulatorController.Factory(
                                 bitrateRegulatorConfig = bitrateRegulatorConfig
                             )
@@ -401,7 +622,14 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     fun stopStream() {
         viewModelScope.launch {
             try {
-                val currentStreamingState = streamer.isStreamingFlow.value
+                val currentStreamer = serviceStreamer
+                
+                if (currentStreamer == null) {
+                    Log.w(TAG, "Service streamer not ready, cannot stop stream")
+                    return@launch
+                }
+                
+                val currentStreamingState = currentStreamer.isStreamingFlow.value
                 Log.i(TAG, "stopStream() called - Current streaming state: $currentStreamingState")
                 
                 // If already stopped, don't do anything
@@ -411,21 +639,19 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                     return@launch
                 }
                 
-                Log.i(TAG, "Stopping stream... Current streaming state: $currentStreamingState")
+                Log.i(TAG, "Stopping stream...")
                 
                 // Release MediaProjection FIRST to interrupt any ongoing capture
                 streamingMediaProjection?.let { mediaProjection ->
                     mediaProjection.stop()
-                    Log.i(TAG, "MediaProjection stopped - this should interrupt audio capture")
+                    Log.i(TAG, "MediaProjection stopped")
                 }
                 streamingMediaProjection = null
                 
-                // Stop streaming
+                // Stop streaming via helper method
                 try {
-                    if (streamer.isStreamingFlow.value == true) {
-                        streamer.stopStream()
-                        Log.i(TAG, "Stream stop command sent")
-                    }
+                    stopServiceStreaming()
+                    Log.i(TAG, "Stream stop command sent")
                 } catch (e: Exception) {
                     Log.w(TAG, "Error stopping stream: ${e.message}", e)
                 }
@@ -439,60 +665,39 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 
                 // Remove bitrate regulator
                 try {
-                    streamer.removeBitrateRegulatorController()
+                    currentStreamer.removeBitrateRegulatorController()
                     Log.i(TAG, "Bitrate regulator removed")
                 } catch (e: Exception) {
                     Log.w(TAG, "Could not remove bitrate regulator: ${e.message}")
                 }
                 
-                // Reset audio source to clean state BEFORE closing streamer
+                // Reset audio source to clean state
                 try {
-                    val currentVideoSource = streamer.videoInput?.sourceFlow?.value
+                    val currentVideoSource = currentStreamer.videoInput?.sourceFlow?.value
                     if (currentVideoSource !is ICameraSource) {
                         // We're on RTMP source - reset audio to microphone for clean state
                         Log.i(TAG, "RTMP source detected after stop - resetting audio to microphone")
-                        streamer.setAudioSource(MicrophoneSourceFactory())
+                        setServiceAudioSource(MicrophoneSourceFactory())
                     } else {
                         // Camera source - ensure microphone is set
                         Log.i(TAG, "Camera source detected after stop - ensuring microphone audio")
-                        streamer.setAudioSource(MicrophoneSourceFactory())
+                        setServiceAudioSource(MicrophoneSourceFactory())
                     }
                     Log.i(TAG, "Audio source reset to microphone after stream stop")
                 } catch (e: Exception) {
                     Log.w(TAG, "Error resetting audio source after stop: ${e.message}", e)
                 }
                 
-                // Wait a bit for cleanup
-                kotlinx.coroutines.delay(200)
-
-                // Close the streamer
-                try {
-                    streamer.close()
-                    Log.i(TAG, "Streamer closed")
-                } catch (e: Exception) {
-                    Log.w(TAG, "Error closing streamer: ${e.message}", e)
-                }
+                Log.i(TAG, "Stream stop completed successfully")
                 
-                // Wait a moment and check final state
-                kotlinx.coroutines.delay(300)
-                
-                // Clear connection state regardless - this should trigger UI update
-                _isTryingConnectionLiveData.postValue(false)
-                
-                // Force check streaming state after cleanup
-                val finalStreamingState = streamer.isStreamingFlow.value
-                Log.i(TAG, "Stream stop completed. Final streaming state: $finalStreamingState")
-                
-                // If somehow still streaming, log it but don't try complex recovery
-                if (finalStreamingState == true) {
-                    Log.w(TAG, "WARNING: Stream may still be active after stop procedure")
-                }
             } catch (e: Throwable) {
                 Log.e(TAG, "stopStream failed", e)
                 // Force clear state
                 streamingMediaProjection?.stop()
                 streamingMediaProjection = null
+            } finally {
                 _isTryingConnectionLiveData.postValue(false)
+                // Clean up visualizer regardless
                 BufferVisualizerModel.circularPcmBuffer = null
                 bufferVisualizerModel = null
             }
@@ -500,7 +705,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     }
     
     fun setMute(isMuted: Boolean) {
-        streamer.audioInput?.isMuted = isMuted
+        streamer?.audioInput?.isMuted = isMuted
     }
 
     @RequiresPermission(Manifest.permission.CAMERA)
@@ -510,10 +715,10 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
          * exception instead of crashing. You can either catch the exception or check if the
          * configuration is valid for the new camera with [Context.isFrameRateSupported].
          */
-        val videoSource = streamer.videoInput?.sourceFlow?.value
+        val videoSource = streamer?.videoInput?.sourceFlow?.value
         if (videoSource is ICameraSource) {
             viewModelScope.launch {
-                streamer.toggleBackToFront(application)
+                streamer?.toggleBackToFront(application)
             }
         }
         return true
@@ -526,17 +731,39 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
          * exception instead of crashing. You can either catch the exception or check if the
          * configuration is valid for the new camera with [Context.isFrameRateSupported].
          */
-        val videoSource = streamer.videoInput?.sourceFlow?.value
+        val currentStreamer = serviceStreamer
+        if (currentStreamer == null) {
+            Log.e(TAG, "Streamer service not available for camera toggle")
+            _streamerErrorLiveData.postValue("Service not available")
+            return
+        }
+        
+        val videoSource = currentStreamer.videoInput?.sourceFlow?.value
         if (videoSource is ICameraSource) {
             viewModelScope.launch {
-                streamer.setNextCameraId(application)
+                try {
+                    currentStreamer.setNextCameraId(application)
+                    Log.i(TAG, "Camera toggled successfully")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to toggle camera", e)
+                    _streamerErrorLiveData.postValue("Camera toggle failed: ${e.message}")
+                }
             }
+        } else {
+            Log.w(TAG, "Video source is not a camera source, cannot toggle")
         }
     }
 
     @RequiresPermission(Manifest.permission.CAMERA)
     fun toggleVideoSource(bufferVisualizer: BufferVisualizerView) {
-        val videoSource = streamer.videoInput?.sourceFlow?.value
+        val currentStreamer = serviceStreamer
+        if (currentStreamer == null) {
+            Log.e(TAG, "Streamer service not available for video source toggle")
+            _streamerErrorLiveData.postValue("Service not available")
+            return
+        }
+        
+        val videoSource = currentStreamer.videoInput?.sourceFlow?.value
         val isCurrentlyStreaming = isStreamingLiveData.value == true
         
         viewModelScope.launch {
@@ -550,7 +777,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         Log.i(TAG, "Temporarily stopping camera stream for source switch")
                         wasStreaming = true
                         try {
-                            streamer.stopStream()
+                            stopServiceStreaming()
                             // Brief delay to ensure clean stop
                             kotlinx.coroutines.delay(100)
                         } catch (e: Exception) {
@@ -576,7 +803,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                             // Small delay to let RTMP source initialize
                             kotlinx.coroutines.delay(300)
                             val descriptor = storageRepository.endpointDescriptorFlow.first()
-                            streamer.startStream(descriptor)
+                            startServiceStreaming(descriptor)
                         } catch (e: Exception) {
                             Log.e(TAG, "Error restarting stream with RTMP: ${e.message}")
                             _streamerErrorLiveData.postValue("Failed to restart stream with RTMP: ${e.message}")
@@ -592,7 +819,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         Log.i(TAG, "Stopping RTMP streaming before switch")
                         wasStreaming = true
                         try {
-                            streamer.stopStream()
+                            stopServiceStreaming()
                             // Small delay to ensure stream stops properly
                             kotlinx.coroutines.delay(100)
                         } catch (e: Exception) {
@@ -611,8 +838,8 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                     }
                     
                     // Switch to camera source
-                    streamer.setVideoSource(CameraSourceFactory())
-                    streamer.setAudioSource(MicrophoneSourceFactory())
+                    currentStreamer.setVideoSource(CameraSourceFactory())
+                    currentStreamer.setAudioSource(MicrophoneSourceFactory())
                     
                     // If we were streaming before, restart with camera
                     if (wasStreaming) {
@@ -621,7 +848,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                             // Small delay to let camera source initialize
                             kotlinx.coroutines.delay(200)
                             val descriptor = storageRepository.endpointDescriptorFlow.first()
-                            streamer.startStream(descriptor)
+                            startServiceStreaming(descriptor)
                         } catch (e: Exception) {
                             Log.e(TAG, "Error restarting stream with camera: ${e.message}")
                             _streamerErrorLiveData.postValue("Failed to restart stream with camera: ${e.message}")
@@ -635,7 +862,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     @RequiresPermission(Manifest.permission.CAMERA)
     fun toggleVideoSourceWithProjection(bufferVisualizer: BufferVisualizerView, mediaProjection: MediaProjection) {
-        val videoSource = streamer.videoInput?.sourceFlow?.value
+        val videoSource = streamer?.videoInput?.sourceFlow?.value
         val isCurrentlyStreaming = isStreamingLiveData.value == true
         
         viewModelScope.launch {
@@ -653,11 +880,15 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 else -> {
                     Log.i(TAG, "Switching from RTMP back to Camera source with MediaProjection (streaming: $isCurrentlyStreaming)")
                     
+                    // Track if we were streaming so we can resume after switch
+                    var wasStreaming = false
+                    
                     // If we're currently streaming, we need to stop the current source first
                     if (isCurrentlyStreaming) {
                         Log.i(TAG, "Stopping RTMP streaming before switch")
+                        wasStreaming = true
                         try {
-                            streamer.stopStream()
+                            streamer?.stopStream()
                             // Small delay to ensure stream stops properly
                             kotlinx.coroutines.delay(100)
                         } catch (e: Exception) {
@@ -674,17 +905,17 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                     mediaProjectionHelper.release()
                     
                     // Switch to camera source
-                    streamer.setVideoSource(CameraSourceFactory())
-                    streamer.setAudioSource(MicrophoneSourceFactory())
+                    streamer?.setVideoSource(CameraSourceFactory())
+                    streamer?.setAudioSource(MicrophoneSourceFactory())
                     
                     // If we were streaming before, restart with camera
-                    if (isCurrentlyStreaming) {
+                    if (wasStreaming) {
                         Log.i(TAG, "Restarting stream with camera source")
                         try {
                             // Small delay to let camera source initialize
                             kotlinx.coroutines.delay(200)
                             val descriptor = storageRepository.endpointDescriptorFlow.first()
-                            streamer.startStream(descriptor)
+                            startServiceStreaming(descriptor)
                         } catch (e: Exception) {
                             Log.e(TAG, "Error restarting stream with camera: ${e.message}")
                             _streamerErrorLiveData.postValue("Failed to restart stream with camera: ${e.message}")
@@ -728,15 +959,20 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         })
         
         // Set video source - ExoPlayer video display
-        streamer.setVideoSource(CustomStreamPackSourceInternal.Factory(exoPlayerInstance))
+        val streamer = serviceStreamer
+        if (streamer == null) {
+            Log.e(TAG, "Streamer service not available")
+            throw IllegalStateException("Service not available")
+        }
+        streamer?.setVideoSource(CustomStreamPackSourceInternal.Factory(exoPlayerInstance))
         
         // Set audio source - try MediaProjection, fallback to microphone if it fails
         try {
-            streamer.setAudioSource(MediaProjectionAudioSourceFactory(mediaProjection))
+            streamer?.setAudioSource(MediaProjectionAudioSourceFactory(mediaProjection))
             Log.i(TAG, "MediaProjection audio source configured for ExoPlayer")
         } catch (e: Exception) {
             Log.w(TAG, "MediaProjection audio source failed, using microphone fallback: ${e.message}")
-            streamer.setAudioSource(MicrophoneSourceFactory())
+            streamer?.setAudioSource(MicrophoneSourceFactory())
         }
         
         Log.i(TAG, "ExoPlayer with MediaProjection setup completed")
@@ -779,10 +1015,15 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         })
         
         // Set video source - ExoPlayer video display
-        streamer.setVideoSource(CustomStreamPackSourceInternal.Factory(exoPlayerInstance))
+        val streamer = serviceStreamer
+        if (streamer == null) {
+            Log.e(TAG, "Streamer service not available")
+            throw IllegalStateException("Service not available")
+        }
+        streamer?.setVideoSource(CustomStreamPackSourceInternal.Factory(exoPlayerInstance))
         
         // Use microphone for now - MediaProjection audio will be set when streaming starts
-        streamer.setAudioSource(MicrophoneSourceFactory())
+        streamer?.setAudioSource(MicrophoneSourceFactory())
         
         Log.i(TAG, "ExoPlayer setup completed with microphone audio (MediaProjection will be configured on stream start)")
     }
@@ -843,8 +1084,8 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         bufferVisualizerModel = BufferVisualizerModel
                         bufferVisualizer.startObserving()
 
-                        streamer.setVideoSource(CustomStreamPackSourceInternal.Factory(exoPlayerInstance))
-                        streamer.setAudioSource(CustomAudioInput3.Factory(
+                        streamer?.setVideoSource(CustomStreamPackSourceInternal.Factory(exoPlayerInstance))
+                        streamer?.setAudioSource(CustomAudioInput3.Factory(
                             audioRecordWrapper,
                             bufferVisualizerModel as BufferVisualizerModel
                         ))
@@ -853,7 +1094,20 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             }
     }
 
-    val isCameraSource = streamer.videoInput?.sourceFlow?.map { it is ICameraSource }?.asLiveData()
+    val isCameraSource: LiveData<Boolean>
+        get() = serviceReadyFlow.flatMapLatest { ready ->
+            if (ready && serviceStreamer != null) {
+                Log.d(TAG, "isCameraSource: serviceStreamer available, checking video source")
+                serviceStreamer!!.videoInput?.sourceFlow?.map { source ->
+                    val isCam = source is ICameraSource
+                    Log.d(TAG, "isCameraSource: video source = $source, isCameraSource = $isCam")
+                    isCam
+                } ?: kotlinx.coroutines.flow.flowOf(false)
+            } else {
+                Log.d(TAG, "isCameraSource: service not ready or serviceStreamer null, returning false")
+                kotlinx.coroutines.flow.flowOf(false)
+            }
+        }.asLiveData()
 
     val isFlashAvailable = MutableLiveData(false)
     fun toggleFlash() {
@@ -963,7 +1217,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         }
 
     private fun notifySourceChanged() {
-        val videoSource = streamer.videoInput?.sourceFlow?.value ?: return
+        val videoSource = streamer?.videoInput?.sourceFlow?.value ?: return
         if (videoSource is ICameraSource) {
             notifyCameraChanged(videoSource)
         } else {

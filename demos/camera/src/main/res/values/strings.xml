@@ -4,6 +4,9 @@
     <string name="action_settings">Settings</string>
     <string name="menu_actions">Menu actions</string>
 
+    <!-- Camera Streaming Service -->
+    <string name="camera_streaming_channel_name">Camera Streaming</string>
+
     <!-- Preview -->
     <string name="live">Start Live</string>
     <string name="stop">Stop</string>

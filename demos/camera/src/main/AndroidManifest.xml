@@ -41,6 +41,12 @@
             android:name=".services.DemoMediaProjectionService"
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />
+
+        <!-- Camera streaming service for background streaming capability -->
+        <service
+            android:name=".services.CameraStreamerService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
     </application>
 
 </manifest>

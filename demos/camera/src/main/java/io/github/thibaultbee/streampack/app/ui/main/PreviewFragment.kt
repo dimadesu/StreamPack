@@ -92,20 +92,25 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             val isCurrentlyStreaming = previewViewModel.isStreamingLiveData.value == true
             val isTryingConnection = previewViewModel.isTryingConnectionLiveData.value == true
             
-            if (!isCurrentlyStreaming && !isTryingConnection) {
+            // Also check the actual streamer state directly as backup
+            val actualStreamingState = previewViewModel.serviceStreamer?.isStreamingFlow?.value == true
+            Log.d(TAG, "Live button - actualStreamingState from serviceStreamer: $actualStreamingState")
+            
+            // Use either LiveData or direct streamer state
+            val isReallyStreaming = isCurrentlyStreaming || actualStreamingState
+            
+            if (!isReallyStreaming && !isTryingConnection) {
                 // Not streaming and not trying - start stream
                 Log.d(TAG, "Starting stream...")
-                view.isChecked = true // Ensure button shows starting state
                 startStreamIfPermissions(previewViewModel.requiredPermissions)
-            } else if (isCurrentlyStreaming || isTryingConnection) {
+            } else if (isReallyStreaming || isTryingConnection) {
                 // Streaming or trying to connect - stop stream
                 Log.d(TAG, "Stopping stream...")
-                view.isChecked = false // Ensure button shows stopping state
                 stopStream()
             } else {
                 Log.w(TAG, "Uncertain state - button clicked but unclear action needed")
                 // Reset button to reflect actual state
-                view.isChecked = isCurrentlyStreaming || isTryingConnection
+                view.isChecked = isReallyStreaming || isTryingConnection
             }
         }
 
@@ -178,18 +183,9 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
     }
 
     private fun startStream() {
-        Log.d(TAG, "startStream() called - about to request MediaProjection")
-        previewViewModel.startStreamWithMediaProjection(
-            mediaProjectionLauncher,
-            onSuccess = {
-                Log.i(TAG, "Stream started successfully with MediaProjection")
-            },
-            onError = { error ->
-                Log.e(TAG, "Stream start failed: $error")
-                showError("Stream Start Failed", error)
-                binding.liveButton.isChecked = false
-            }
-        )
+        Log.d(TAG, "startStream() called - starting with service streamer")
+        // Use the main startStream method which handles service integration properly
+        previewViewModel.startStream()
     }
 
     private fun stopStream() {

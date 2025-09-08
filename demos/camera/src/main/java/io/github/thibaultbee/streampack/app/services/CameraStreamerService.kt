@@ -1,0 +1,158 @@
+/*
+ * Copyright (C) 2022 Thibault B.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package io.github.thibaultbee.streampack.app.services
+
+import android.media.projection.MediaProjection
+import android.os.Bundle
+import io.github.thibaultbee.streampack.core.streamers.single.ISingleStreamer
+import io.github.thibaultbee.streampack.core.streamers.single.SingleStreamer
+import io.github.thibaultbee.streampack.core.interfaces.IWithVideoSource
+import io.github.thibaultbee.streampack.core.interfaces.IWithAudioSource
+import io.github.thibaultbee.streampack.core.elements.sources.audio.IAudioSourceInternal
+import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoSourceInternal
+import io.github.thibaultbee.streampack.services.StreamerService
+import io.github.thibaultbee.streampack.services.utils.SingleStreamerFactory
+import io.github.thibaultbee.streampack.app.R
+import io.github.thibaultbee.streampack.core.configuration.mediadescriptor.MediaDescriptor
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+
+/**
+ * CameraStreamerService extending StreamerService for camera streaming
+ */
+class CameraStreamerService : StreamerService<ISingleStreamer>(
+    streamerFactory = SingleStreamerFactory(
+        withAudio = true, 
+        withVideo = true, 
+        defaultRotation = 0  // Provide default rotation since service context has no display
+    ),
+    notificationId = 1001,
+    channelId = "camera_service", 
+    channelNameResourceId = R.string.app_name
+) {
+    companion object {
+        const val TAG = "CameraStreamerService"
+    }
+
+    private val _serviceReady = MutableStateFlow(false)
+
+    /**
+     * Required implementation of abstract method
+     */
+    override suspend fun onExtra(extras: Bundle) {
+        // Handle extras if needed
+        _serviceReady.value = true
+    }
+
+    /**
+     * Get the SingleStreamer instance for ViewModel compatibility
+     */
+    fun getSingleStreamer(): SingleStreamer = streamer as SingleStreamer
+
+    /**
+     * Alternative getter that ViewModel uses
+     */
+    fun getStreamer(): SingleStreamer = getSingleStreamer()
+
+    /**
+     * Get MediaProjection for audio capture - not needed for camera service
+     */
+    fun getMediaProjection(): MediaProjection? = null
+
+    /**
+     * Video input access for ViewModel compatibility
+     */
+    val videoInput get() = (streamer as? IWithVideoSource)?.videoInput
+
+    /**
+     * Audio input access for ViewModel compatibility
+     */
+    val audioInput get() = (streamer as? IWithAudioSource)?.audioInput
+
+    /**
+     * Service ready StateFlow for ViewModel compatibility
+     */
+    val serviceReady: StateFlow<Boolean> = _serviceReady
+
+    /**
+     * Service ready callback helper
+     */
+    fun serviceReady(callback: (SingleStreamer) -> Unit) {
+        callback(getSingleStreamer())
+    }
+
+    /**
+     * Get streaming flow for ViewModel compatibility
+     */
+    val isStreamingFlow: StateFlow<Boolean> get() = streamer.isStreamingFlow
+
+    /**
+     * Get streamer flow for ViewModel compatibility
+     */
+    val streamerFlow: StateFlow<SingleStreamer?> by lazy { 
+        MutableStateFlow(getSingleStreamer())
+    }
+
+    /**
+     * Track streaming state for restore functionality
+     */
+    var wasStreaming: Boolean = false
+
+    /**
+     * Set video source method for ViewModel compatibility
+     */
+    fun setVideoSource(videoSourceFactory: IVideoSourceInternal.Factory) {
+        lifecycleScope.launch {
+            (streamer as? IWithVideoSource)?.setVideoSource(videoSourceFactory)
+        }
+    }
+
+    /**
+     * Set audio source method for ViewModel compatibility  
+     */
+    fun setAudioSource(audioSourceFactory: IAudioSourceInternal.Factory) {
+        lifecycleScope.launch {
+            (streamer as? IWithAudioSource)?.setAudioSource(audioSourceFactory)
+        }
+    }
+
+    /**
+     * Start streaming with MediaDescriptor for ViewModel compatibility
+     */
+    suspend fun startStreaming(descriptor: MediaDescriptor): Boolean {
+        return try {
+            streamer.open(descriptor)
+            streamer.startStream()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Stop streaming method
+     */
+    suspend fun stopStreaming(): Boolean {
+        return try {
+            streamer.stopStream()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+}
