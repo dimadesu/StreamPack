@@ -37,6 +37,7 @@ import androidx.camera.viewfinder.core.populateFromCharacteristics
 import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import io.github.thibaultbee.streampack.core.elements.sources.video.IPreviewableSource
+import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoSourceInternal
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.ICameraSource
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.extensions.getCameraCharacteristics
 import io.github.thibaultbee.streampack.core.elements.utils.ConflatedJob
@@ -319,16 +320,25 @@ class PreviewView @JvmOverloads constructor(
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
-
-        lifecycleScope?.launch {
-            try {
-                stopPreview()
-            } catch (t: Throwable) {
-                Logger.e(TAG, "Failed to stop preview", t)
+        
+        // Only stop preview if not streaming
+        val videoSource = streamer?.videoInput?.sourceFlow?.value
+        if (videoSource is ICameraSource) {
+            // Check if camera is currently streaming before stopping preview
+            // Cast to IVideoSourceInternal to access isStreamingFlow
+            val videoSourceInternal = videoSource as? IVideoSourceInternal
+            val isCurrentlyStreaming = videoSourceInternal?.isStreamingFlow?.value ?: false
+            if (!isCurrentlyStreaming) {
+                lifecycleScope?.launch {
+                    try {
+                        videoSource.stopPreview()
+                    } catch (t: Throwable) {
+                        Logger.e(TAG, "Failed to stop preview on detach", t)
+                    }
+                }
             }
-        } ?: Logger.e(TAG, "LifecycleScope is not available")
-
-        cancelState()
+        }
+        
         coroutineScope?.cancel()
         coroutineScope = null
     }

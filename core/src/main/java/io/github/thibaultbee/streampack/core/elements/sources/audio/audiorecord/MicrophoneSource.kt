@@ -30,27 +30,24 @@ import java.util.UUID
  */
 public open class MicrophoneSource : AudioRecordSource() {
     override fun buildAudioRecord(config: AudioSourceConfig, bufferSize: Int): AudioRecord {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val audioFormat = AudioFormat.Builder()
-                .setEncoding(config.byteFormat)
-                .setSampleRate(config.sampleRate)
-                .setChannelMask(config.channelConfig)
-                .build()
-
-            AudioRecord.Builder()
-                .setAudioFormat(audioFormat)
-                .setBufferSizeInBytes(bufferSize)
-                .setAudioSource(MediaRecorder.AudioSource.DEFAULT)
-                .build()
+        // Try VOICE_COMMUNICATION first for better background recording support
+        val audioSource = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            MediaRecorder.AudioSource.VOICE_COMMUNICATION
         } else {
-            AudioRecord(
-                MediaRecorder.AudioSource.DEFAULT,
-                config.sampleRate,
-                config.channelConfig,
-                config.byteFormat,
-                bufferSize
-            )
+            MediaRecorder.AudioSource.MIC
         }
+        
+        return AudioRecord.Builder()
+            .setAudioSource(audioSource)
+            .setAudioFormat(
+                AudioFormat.Builder()
+                    .setSampleRate(config.sampleRate)
+                    .setChannelMask(config.channelConfig)
+                    .setEncoding(config.byteFormat)
+                    .build()
+            )
+            .setBufferSizeInBytes(bufferSize)
+            .build()
     }
 }
 

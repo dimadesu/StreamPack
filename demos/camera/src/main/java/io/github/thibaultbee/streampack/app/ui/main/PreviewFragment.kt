@@ -17,9 +17,13 @@ package io.github.thibaultbee.streampack.app.ui.main
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.AppOpsManager
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.content.pm.PackageManager
 import android.media.projection.MediaProjection
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
@@ -29,6 +33,7 @@ import android.widget.ToggleButton
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresPermission
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
@@ -41,6 +46,7 @@ import io.github.thibaultbee.streampack.app.databinding.MainFragmentBinding
 import io.github.thibaultbee.streampack.app.utils.DialogUtils
 import io.github.thibaultbee.streampack.app.utils.MediaProjectionHelper
 import io.github.thibaultbee.streampack.app.utils.PermissionManager
+import io.github.thibaultbee.streampack.app.utils.BatteryOptimizationManager
 import io.github.thibaultbee.streampack.core.interfaces.IStreamer
 import io.github.thibaultbee.streampack.core.interfaces.IWithVideoSource
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.ICameraSource
@@ -59,6 +65,9 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
 
     // MediaProjection permission launcher - connects to MediaProjectionHelper
     private lateinit var mediaProjectionLauncher: ActivityResultLauncher<Intent>
+    
+    // Battery optimization manager for background audio support
+    private lateinit var batteryOptimizationManager: BatteryOptimizationManager
 
     override fun onDestroyView() {
         super.onDestroyView()
@@ -69,6 +78,9 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
         
         // Initialize MediaProjection launcher with helper
         mediaProjectionLauncher = previewViewModel.mediaProjectionHelper.registerLauncher(this)
+        
+        // Initialize battery optimization manager
+        batteryOptimizationManager = BatteryOptimizationManager(requireContext())
     }
 
     override fun onCreateView(
@@ -158,8 +170,11 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
 
         previewViewModel.streamerLiveData.observe(viewLifecycleOwner) { streamer ->
             if (streamer is IStreamer) {
+                // TODO: For background streaming, we don't want to automatically stop streaming
+                // when the app goes to background. The service should handle this.
                 // TODO: Remove this observer when streamer is released
-                lifecycle.addObserver(StreamerViewModelLifeCycleObserver(streamer))
+                // lifecycle.addObserver(StreamerViewModelLifeCycleObserver(streamer))
+                Log.d(TAG, "Streamer lifecycle observer disabled for background streaming support")
             } else {
                 Log.e(TAG, "Streamer is not a ICoroutineStreamer")
             }
@@ -188,6 +203,21 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
     private fun startStream() {
         Log.d(TAG, "startStream() called - checking if MediaProjection is required")
         
+        // Check if we should prompt for battery optimization to improve background audio
+        // Note: promptForBatteryOptimization always calls one of the callbacks
+        batteryOptimizationManager.promptForBatteryOptimization(
+            onAccept = {
+                Log.d(TAG, "User accepted battery optimization prompt")
+                performStartStream()
+            },
+            onDecline = {
+                Log.d(TAG, "User declined battery optimization prompt or no prompt needed - continuing with streaming")
+                performStartStream()
+            }
+        )
+    }
+    
+    private fun performStartStream() {
         // Check if MediaProjection is required for this streaming setup
         if (previewViewModel.requiresMediaProjection()) {
             Log.d(TAG, "MediaProjection required - using startStreamWithMediaProjection")
@@ -280,6 +310,17 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                         } else {
                             Log.d(TAG, "Preview was already running")
                         }
+                        
+                        // Re-request audio focus when app returns to foreground if streaming
+                        val isCurrentlyStreaming = previewViewModel.isStreamingLiveData.value ?: false
+                        if (isCurrentlyStreaming) {
+                            Log.d(TAG, "App returned to foreground while streaming - handling recovery")
+                            // Get service and handle foreground recovery
+                            previewViewModel.service?.let { service ->
+                                service.handleForegroundRecovery()
+                                Log.d(TAG, "Foreground recovery completed")
+                            }
+                        }
                     } catch (e: Exception) {
                         Log.w(TAG, "Error ensuring preview is running: ${e.message}")
                     }
@@ -332,10 +373,36 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             PermissionManager.hasPermissions(
                 requireContext(), *permissions.toTypedArray()
             ) -> {
+                // Log detailed permission status before starting stream
+                permissions.forEach { permission ->
+                    val isGranted = ContextCompat.checkSelfPermission(requireContext(), permission) == PackageManager.PERMISSION_GRANTED
+                    Log.i(TAG, "Permission $permission: granted=$isGranted")
+                }
+                
+                // Special check for RECORD_AUDIO AppOps
+                if (permissions.contains(Manifest.permission.RECORD_AUDIO)) {
+                    try {
+                        val appOpsManager = requireContext().getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+                        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            appOpsManager.checkOpNoThrow(
+                                AppOpsManager.OPSTR_RECORD_AUDIO,
+                                android.os.Process.myUid(),
+                                requireContext().packageName
+                            )
+                        } else {
+                            AppOpsManager.MODE_ALLOWED
+                        }
+                        Log.i(TAG, "RECORD_AUDIO AppOps mode: $mode (${if (mode == AppOpsManager.MODE_ALLOWED) "ALLOWED" else "BLOCKED"})")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to check RECORD_AUDIO AppOps", e)
+                    }
+                }
+                
                 startStream()
             }
 
             else -> {
+                Log.w(TAG, "Missing permissions, requesting: ${permissions.joinToString()}")
                 requestLiveStreamPermissionsLauncher.launch(
                     permissions.toTypedArray()
                 )

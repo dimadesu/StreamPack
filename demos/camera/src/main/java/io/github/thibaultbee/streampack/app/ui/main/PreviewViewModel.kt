@@ -106,6 +106,11 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     private var streamerService: CameraStreamerService? = null
     
     /**
+     * Public getter for the service for foreground recovery
+     */
+    val service: CameraStreamerService? get() = streamerService
+    
+    /**
      * Current streamer instance from the service
      */
     var serviceStreamer: SingleStreamer? = null
@@ -329,28 +334,30 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         application.startForegroundService(serviceIntent)
         Log.i(TAG, "Started/reconnected to CameraStreamerService as independent foreground service")
         
-        serviceConnection = StreamerService.bindService(
-            context = application,
-            serviceClass = CameraStreamerService::class.java,
-            onServiceCreated = { streamer ->
-                serviceStreamer = streamer as SingleStreamer
-                streamerFlow.value = serviceStreamer
-                _serviceReady.value = true
-                Log.i(TAG, "CameraStreamerService connected and ready - streaming state: ${streamer.isStreamingFlow.value}")
-                
-                // If service was already streaming when we reconnected, this will be reflected
-                // in the streamer's isStreamingFlow automatically
-            },
-            onServiceDisconnected = { name ->
+        // Create custom service connection to get both streamer and service
+        val connection = object : ServiceConnection {
+            override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+                if (binder is CameraStreamerService.CameraStreamerServiceBinder) {
+                    streamerService = binder.getService()
+                    serviceStreamer = binder.streamer as SingleStreamer
+                    streamerFlow.value = serviceStreamer
+                    _serviceReady.value = true
+                    Log.i(TAG, "CameraStreamerService connected and ready - streaming state: ${binder.streamer.isStreamingFlow.value}")
+                }
+            }
+
+            override fun onServiceDisconnected(name: ComponentName?) {
                 Log.w(TAG, "CameraStreamerService disconnected: $name")
-                // Don't set serviceReady to false immediately on disconnect
-                // The service might still be running, just temporarily disconnected
                 serviceStreamer = null
+                streamerService = null
                 streamerFlow.value = null
-                // Only set serviceReady to false if this is a permanent disconnection
                 _serviceReady.value = false
             }
-        )
+        }
+        
+        // Use manual binding with custom connection - reuse the same intent
+        application.bindService(serviceIntent, connection, Context.BIND_AUTO_CREATE)
+        serviceConnection = connection
     }
 
     /**
@@ -481,6 +488,12 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     fun configureAudio() {
         viewModelScope.launch {
             try {
+                // Don't reconfigure audio if already streaming - prevents disruption
+                if (serviceStreamer?.isStreamingFlow?.value == true) {
+                    Log.i(TAG, "Skipping audio configuration - already streaming")
+                    return@launch
+                }
+                
                 storageRepository.audioConfigFlow.first()?.let { 
                     serviceStreamer?.setAudioConfig(it)
                 }

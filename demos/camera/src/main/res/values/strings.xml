@@ -11,9 +11,12 @@
     <!-- Service Notifications -->
     <string name="service_notification_title">StreamPack Camera Service</string>
     <string name="service_notification_text_created">Service created</string>
-    <string name="service_notification_text_streaming">Streaming in progress…</string>
+    <string name="service_notification_text_streaming">Streaming in progress… (Audio continues in
+        background)</string>
     <string name="service_notification_text_error">Error: %1$s</string>
     <string name="service_notification_text_stopped">Streaming stopped</string>
+    <string name="service_notification_text_background_audio_restricted">Background audio may be
+        limited. Check battery optimization settings.</string>
 
     <!-- Preview -->
     <string name="live">Start Live</string>

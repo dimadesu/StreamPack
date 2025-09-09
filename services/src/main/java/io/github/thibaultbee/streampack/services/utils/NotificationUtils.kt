@@ -67,14 +67,36 @@ class NotificationUtils(
     fun createNotification(
         title: String,
         content: String? = null,
-        @DrawableRes iconResourceId: Int
+        @DrawableRes iconResourceId: Int,
+        isForgroundService: Boolean = false
     ): Notification {
         val builder = NotificationCompat.Builder(service, channelId).apply {
             setSmallIcon(iconResourceId)
             setContentTitle(title)
-
+            
             content?.let {
                 setContentText(it)
+            }
+            
+            // Enhanced attributes for foreground service priority
+            if (isForgroundService) {
+                priority = NotificationCompat.PRIORITY_HIGH
+                setOngoing(true) // Prevents user dismissal
+                setAutoCancel(false) // Notification stays until explicitly removed
+                setShowWhen(true)
+                setUsesChronometer(true) // Shows elapsed time
+                setCategory(NotificationCompat.CATEGORY_SERVICE)
+                
+                // For Android 8.0+, ensure foreground service behavior
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    setChannelId(channelId)
+                    // Add foreground service badge
+                    setBadgeIconType(NotificationCompat.BADGE_ICON_SMALL)
+                }
+                
+                // Prevent system from killing the service
+                setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                setLocalOnly(true) // Don't sync to wearables to save resources
             }
         }
 
@@ -83,7 +105,8 @@ class NotificationUtils(
 
     fun createNotificationChannel(
         @StringRes nameResourceId: Int,
-        @StringRes descriptionResourceId: Int
+        @StringRes descriptionResourceId: Int,
+        importance: Int = NotificationManager.IMPORTANCE_HIGH // Changed from DEFAULT to HIGH
     ) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager =
@@ -94,8 +117,16 @@ class NotificationUtils(
             val channel = NotificationChannel(
                 channelId,
                 name,
-                NotificationManager.IMPORTANCE_DEFAULT
-            )
+                importance // Use the provided importance level
+            ).apply {
+                // Enhanced channel attributes for foreground services
+                setShowBadge(true)
+                enableVibration(false) // Disable vibration for background service
+                enableLights(false) // Disable LED for background service
+                setSound(null, null) // Silent for background service
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            }
+            
             if (descriptionResourceId != 0) {
                 channel.description = service.getString(descriptionResourceId)
             }
