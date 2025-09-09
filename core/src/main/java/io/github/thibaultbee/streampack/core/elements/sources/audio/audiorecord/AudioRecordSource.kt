@@ -169,21 +169,6 @@ public sealed class AudioRecordSource : IAudioSourceInternal, IAudioRecordSource
     private val maxConsecutiveFailures = 3
     private val failureRetryDelayMs = 2000L
     private var silentModeActive = false
-    
-    // Simple, reliable audio level detection  
-    private var consecutiveSilentFrames = 0
-    private val maxSilentFramesBeforeRestart = 300 // Much longer - ~6 seconds at 50fps
-    private val silenceThreshold = 100 // Higher threshold to reduce false positives
-    private var lastNonSilentTime = System.currentTimeMillis()
-    private var lastRestartTime = 0L
-    private val restartCooldownMs = 10000L // 10 second cooldown to reduce restart frequency
-    private var lastValidAudioData: ByteArray? = null
-    private var consecutiveRestarts = 0
-    private val maxConsecutiveRestarts = 5 // Limit restart attempts
-    
-    // Dual recording strategy
-    private var backupAudioRecord: AudioRecord? = null
-    private var usingBackup = false
 
     override fun fillAudioFrame(frame: RawFrame): RawFrame {
         val currentAudioRecord = requireNotNull(audioRecord) { "Audio source is not initialized" }
@@ -258,70 +243,6 @@ public sealed class AudioRecordSource : IAudioSourceInternal, IAudioRecordSource
             val length = currentAudioRecord.read(buffer, buffer.remaining())
             if (length > 0) {
                 frame.timestampInUs = getTimestampInUs(currentAudioRecord)
-                
-                // Store valid audio data for potential buffering during restart
-                val bufferArray = ByteArray(buffer.remaining())
-                buffer.duplicate().get(bufferArray)
-                
-                // Check audio level to detect background muting
-                val audioLevel = calculateAudioLevel(buffer)
-                if (audioLevel > silenceThreshold) {
-                    consecutiveSilentFrames = 0
-                    lastNonSilentTime = System.currentTimeMillis()
-                    consecutiveRestarts = 0 // Reset restart counter when audio is detected
-                    
-                    // Store this as valid audio data for potential crossfading
-                    lastValidAudioData = bufferArray.clone()
-                } else {
-                    consecutiveSilentFrames++
-                    
-                    // If we've had silence for too long, try to restart AudioRecord (but not too often)
-                    if (consecutiveSilentFrames >= maxSilentFramesBeforeRestart && 
-                        System.currentTimeMillis() - lastNonSilentTime > 5000 && // 5 seconds of silence
-                        System.currentTimeMillis() - lastRestartTime > restartCooldownMs && // Respect cooldown
-                        consecutiveRestarts < maxConsecutiveRestarts) { // Limit restart attempts
-                        
-                        Logger.w(TAG, "Detected prolonged silence ($consecutiveSilentFrames frames), attempting AudioRecord restart (attempt ${consecutiveRestarts + 1}/$maxConsecutiveRestarts)")
-                        
-                        lastRestartTime = System.currentTimeMillis()
-                        consecutiveRestarts++
-                        
-                        try {
-                            // Simple restart sequence
-                            this@AudioRecordSource.audioRecord?.stop()
-                            Thread.sleep(200) // Longer pause to allow system reset
-                            this@AudioRecordSource.audioRecord?.startRecording()
-                            
-                            if (this@AudioRecordSource.audioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
-                                Logger.i(TAG, "Successfully restarted AudioRecord after silence detection")
-                                consecutiveSilentFrames = 0
-                                lastNonSilentTime = System.currentTimeMillis()
-                            } else {
-                                Logger.w(TAG, "AudioRecord restart failed, state: ${this@AudioRecordSource.audioRecord?.recordingState}")
-                            }
-                        } catch (e: Exception) {
-                            Logger.w(TAG, "Failed to restart AudioRecord after silence detection", e)
-                            // Check if this might be an AppOps permission issue
-                            if (e.message?.contains("permission", ignoreCase = true) == true ||
-                                e.message?.contains("appops", ignoreCase = true) == true) {
-                                Logger.e(TAG, "Audio restart failed due to potential AppOps/Permission issue. Check if RECORD_AUDIO is allowed at system level.")
-                                Logger.e(TAG, "To resolve: Go to Settings > Apps > [App Name] > Permissions > Microphone > Allow")
-                                Logger.e(TAG, "Or disable battery optimization: Settings > Battery > Battery Optimization > [App Name] > Don't optimize")
-                            }
-                        }
-                    } else if (consecutiveRestarts >= maxConsecutiveRestarts) {
-                        // If we've hit the restart limit, enable background mode with reduced restart attempts
-                        if (System.currentTimeMillis() - lastRestartTime > 30000L) { // Try again after 30 seconds
-                            Logger.w(TAG, "Background audio restriction detected. Audio has been silent for ${System.currentTimeMillis() - lastNonSilentTime}ms. This is likely due to Android's background microphone restrictions.")
-                            Logger.i(TAG, "Background mode: Attempting restart after 30 second cooldown (restarts: $consecutiveRestarts)")
-                            Logger.i(TAG, "To improve background audio performance, disable battery optimization for this app in Settings > Battery > Battery Optimization")
-                            consecutiveRestarts = 0 // Reset for one more attempt
-                        } else if (consecutiveSilentFrames % 150 == 0) { // Log every ~3 seconds when silent
-                            Logger.d(TAG, "Background silence continues: ${consecutiveSilentFrames} frames (${(System.currentTimeMillis() - lastNonSilentTime) / 1000}s). Next restart attempt in ${30 - (System.currentTimeMillis() - lastRestartTime) / 1000}s")
-                        }
-                    }
-                }
-                
                 return frame
             } else {
                 frame.close()
@@ -352,24 +273,6 @@ public sealed class AudioRecordSource : IAudioSourceInternal, IAudioRecordSource
     /**
      * Calculate audio level from buffer to detect silence/muting
      */
-    private fun calculateAudioLevel(buffer: java.nio.ByteBuffer): Int {
-        val position = buffer.position()
-        var sum = 0L
-        var sampleCount = 0
-        
-        // Assume 16-bit PCM samples
-        while (buffer.remaining() >= 2) {
-            val sample = buffer.short.toInt()
-            sum += kotlin.math.abs(sample)
-            sampleCount++
-        }
-        
-        // Reset buffer position
-        buffer.position(position)
-        
-        return if (sampleCount > 0) (sum / sampleCount).toInt() else 0
-    }
-
     override fun getAudioFrame(frameFactory: IReadOnlyRawFrameFactory): RawFrame {
         val bufferSize = requireNotNull(bufferSize) { "Buffer size is not initialized" }
 

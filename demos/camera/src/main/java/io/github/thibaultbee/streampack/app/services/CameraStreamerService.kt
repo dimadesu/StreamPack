@@ -317,7 +317,7 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
             streamer.let { currentStreamer ->
                 if (currentStreamer.isStreamingFlow.value) {
                     Log.i(TAG, "Triggering audio source recovery for active stream")
-                    // The audio source restart will be handled by the existing silence detection mechanism
+                    // Audio recovery now handled by comprehensive background audio solution
                 }
             }
         } catch (e: Exception) {
