@@ -232,7 +232,7 @@ internal class EncodingPipelineOutput(
         }
 
         override fun onOutputFrame(frame: Frame) {
-            Logger.i("StreamPackTimestamps", "Final AUDIO frame for StreamPack: timestamp=${frame.ptsInUs}µs, size=${frame.rawBuffer.remaining()}")
+//            Logger.i("StreamPackTimestamps", "Final AUDIO frame for StreamPack: timestamp=${frame.ptsInUs}µs, size=${frame.rawBuffer.remaining()}")
             audioStreamId?.let {
                 runBlocking {
                     this@EncodingPipelineOutput.endpointInternal.write(frame, it)
@@ -247,7 +247,7 @@ internal class EncodingPipelineOutput(
         }
 
         override fun onOutputFrame(frame: Frame) {
-            Logger.i("StreamPackTimestamps", "Final VIDEO frame for StreamPack: timestamp=${frame.ptsInUs}µs, size=${frame.rawBuffer.remaining()}")
+//            Logger.i("StreamPackTimestamps", "Final VIDEO frame for StreamPack: timestamp=${frame.ptsInUs}µs, size=${frame.rawBuffer.remaining()}")
             videoStreamId?.let {
                 runBlocking {
                     this@EncodingPipelineOutput.endpointInternal.write(frame, it)

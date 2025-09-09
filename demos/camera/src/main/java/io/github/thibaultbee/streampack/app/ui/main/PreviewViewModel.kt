@@ -70,6 +70,8 @@ import io.github.thibaultbee.streampack.core.interfaces.startStream
 import io.github.thibaultbee.streampack.core.streamers.single.SingleStreamer
 import io.github.thibaultbee.streampack.core.utils.extensions.isClosedException
 import io.github.thibaultbee.streampack.ext.srt.regulator.controllers.DefaultSrtBitrateRegulatorController
+import io.github.thibaultbee.streampack.app.utils.BelaboxBitrateRegulatorUsage
+import io.github.thibaultbee.streampack.app.data.models.BitrateRegulatorPreset
 import io.github.thibaultbee.streampack.core.interfaces.IWithAudioSource
 import io.github.thibaultbee.streampack.core.interfaces.IWithVideoSource
 import io.github.thibaultbee.streampack.core.elements.sources.audio.IAudioSourceInternal
@@ -563,9 +565,11 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                     val bitrateRegulatorConfig =
                         storageRepository.bitrateRegulatorConfigFlow.first()
                     if (bitrateRegulatorConfig != null) {
-                        Log.i(TAG, "Add bitrate regulator controller")
+                        val preset = BelaboxBitrateRegulatorUsage.getCurrentPreset()
+                        Log.i(TAG, "Add BELABOX bitrate regulator controller (${preset.displayName} preset)")
                         currentStreamer.addBitrateRegulatorController(
-                            DefaultSrtBitrateRegulatorController.Factory(
+                            BelaboxBitrateRegulatorUsage.createControllerForPreset(
+                                preset = preset,
                                 bitrateRegulatorConfig = bitrateRegulatorConfig
                             )
                         )
@@ -651,10 +655,12 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 if (descriptor.type.sinkType == MediaSinkType.SRT) {
                     val bitrateRegulatorConfig = storageRepository.bitrateRegulatorConfigFlow.first()
                     if (bitrateRegulatorConfig != null) {
-                        Log.i(TAG, "Add bitrate regulator controller")
+                        val preset = BelaboxBitrateRegulatorUsage.getCurrentPreset()
+                        Log.i(TAG, "Add BELABOX bitrate regulator controller to service streamer (${preset.displayName} preset)")
                         val currentStreamer = serviceStreamer
                         currentStreamer?.addBitrateRegulatorController(
-                            DefaultSrtBitrateRegulatorController.Factory(
+                            BelaboxBitrateRegulatorUsage.createControllerForPreset(
+                                preset = preset,
                                 bitrateRegulatorConfig = bitrateRegulatorConfig
                             )
                         )
