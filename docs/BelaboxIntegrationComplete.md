@@ -7,14 +7,16 @@ The BELABOX adaptive bitrate regulator has been successfully integrated into the
 ### 🔧 **What We Hooked Up**
 
 1. **PreviewViewModel Integration**
+
    - Replaced `DefaultSrtBitrateRegulatorController` with BELABOX controller
    - Uses user's bitrate configuration from DataStore
    - Applied to both regular streaming and service streaming modes
    - Added preset-based selection system
 
-2. **Preset-Based Architecture** 
+2. **Preset-Based Architecture**
+
    - **Conservative** (default): Stable WiFi, smooth adjustments
-   - **Aggressive**: Variable connections, fast reactions  
+   - **Aggressive**: Variable connections, fast reactions
    - **Mobile**: Cellular optimized, battery conscious
    - **Custom**: Advanced users, full parameter control
 
@@ -28,7 +30,7 @@ The BELABOX adaptive bitrate regulator has been successfully integrated into the
 When you start SRT streaming in the demo app:
 
 1. **App checks** if SRT bitrate regulation is enabled in settings
-2. **Loads user's** bitrate configuration (min/max ranges) 
+2. **Loads user's** bitrate configuration (min/max ranges)
 3. **Selects preset** (currently defaults to Conservative)
 4. **Creates BELABOX controller** with user config + preset algorithm settings
 5. **Logs activity**: "Add BELABOX bitrate regulator controller (Conservative preset)"
@@ -36,7 +38,7 @@ When you start SRT streaming in the demo app:
 ### 🎯 **Key Benefits Active**
 
 - ✅ **Smooth bitrate transitions** (no more jarring quality changes)
-- ✅ **Multi-metric analysis** (RTT, buffer, throughput) 
+- ✅ **Multi-metric analysis** (RTT, buffer, throughput)
 - ✅ **Graduated responses** (emergency/fast/normal/increase levels)
 - ✅ **Network condition memory** (trend-aware decisions)
 - ✅ **Transport-aware** (prevents over-streaming after static scenes)
@@ -46,6 +48,7 @@ When you start SRT streaming in the demo app:
 The BELABOX algorithm is actively monitoring and adjusting:
 
 **Conservative Preset (default):**
+
 - Bitrate increase: 50-100K steps with 600ms intervals
 - Bitrate decrease: 75-150K steps with 300ms intervals
 - RTT spike tolerance: 75ms
@@ -53,6 +56,7 @@ The BELABOX algorithm is actively monitoring and adjusting:
 - Smooth exponential averaging for all metrics
 
 **Emergency Thresholds:**
+
 - RTT ≥ latency/3 → Immediate drop to minimum
 - Buffer > threshold3 → Fast congestion response
 - Buffer > threshold2 → Normal decrease

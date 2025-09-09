@@ -48,12 +48,12 @@ object BelaboxBitrateRegulatorUsage {
     
     /**
      * Get the current preset being used. 
-     * For now, defaults to CONSERVATIVE, but could be made configurable via settings.
+     * For now, defaults to AGGRESSIVE for faster network adaptation.
      */
     fun getCurrentPreset(): BitrateRegulatorPreset {
         // TODO: This could be made configurable via SharedPreferences or DataStore
-        // For now, we default to conservative for best user experience
-        return BitrateRegulatorPreset.CONSERVATIVE
+        // Using aggressive preset for better responsiveness to network changes
+        return BitrateRegulatorPreset.AGGRESSIVE
     }
     
     /**
