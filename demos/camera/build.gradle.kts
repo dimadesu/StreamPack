@@ -49,6 +49,7 @@ android {
 dependencies {
     implementation(project(":streampack-core"))
     implementation(project(":streampack-ui"))
+    implementation(project(":streampack-services"))
     implementation(project(":streampack-rtmp"))
     implementation(project(":streampack-srt"))
 
@@ -62,6 +63,10 @@ dependencies {
     implementation(libs.androidx.preference.ktx)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.datastore)
+    implementation("androidx.media3:media3-exoplayer:1.8.0")
+    // ExoPlayer UI (optional, for PlayerView)
+    implementation("androidx.media3:media3-ui:1.8.0")
+    implementation("androidx.media3:media3-datasource-rtmp:1.8.0")
 
     testImplementation(libs.junit)
 
