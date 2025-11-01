@@ -91,11 +91,9 @@ internal class EncodingPipelineOutput(
     private val coroutineDispatcher = dispatcherProvider.default
 
     /**
-     * Mutexes to synchronize access to the encoder pipeline.
+     * Mutex to avoid concurrent start/stop operations.
      */
-    private val startStopStreamMutex = Mutex()
-    private val audioConfigurationMutex = Mutex()
-    private val videoConfigurationMutex = Mutex()
+    private val mutex = Mutex()
 
     private val isReleaseRequested = AtomicBoolean(false)
 
@@ -173,20 +171,15 @@ internal class EncodingPipelineOutput(
             Logger.w(TAG, "Video is not enabled")
             return
         }
-        withContext(coroutineDispatcher) {
-            if (isReleaseRequested.get()) {
-                throw IllegalStateException("Output is released")
-            }
-            videoConfigurationMutex.withLock {
-                if (isStreaming) {
-                    Logger.w(
-                        TAG,
-                        "Can't change rotation to $rotation while streaming. Waiting for stopStream"
-                    )
-                    pendingTargetRotation = rotation
-                } else {
-                    setTargetRotationInternal(rotation)
-                }
+        withContextMutex {
+            if (isStreaming) {
+                Logger.w(
+                    TAG,
+                    "Can't change rotation to $rotation while streaming. Waiting for stopStream"
+                )
+                pendingTargetRotation = rotation
+            } else {
+                setTargetRotationInternal(rotation)
             }
         }
     }
@@ -309,17 +302,12 @@ internal class EncodingPipelineOutput(
 
     override suspend fun setAudioCodecConfig(audioCodecConfig: AudioCodecConfig) {
         require(withAudio) { "Audio is not enabled" }
-        withContext(coroutineDispatcher) {
-            if (isReleaseRequested.get()) {
-                throw IllegalStateException("Output is released")
-            }
-            audioConfigurationMutex.withLock {
-                setAudioCodecConfigUnsafe(audioCodecConfig)
-            }
+        withContextMutex {
+            setAudioCodecConfigUnsafe(audioCodecConfig)
         }
     }
 
-    override suspend fun queueAudioFrame(frame: RawFrame) = audioConfigurationMutex.withLock {
+    override suspend fun queueAudioFrame(frame: RawFrame) = mutex.withLock {
         val input = try {
             requireNotNull(audioInput) { "Audio input is null" }
         } catch (t: Throwable) {
@@ -410,13 +398,8 @@ internal class EncodingPipelineOutput(
 
     override suspend fun setVideoCodecConfig(videoCodecConfig: VideoCodecConfig) {
         require(withVideo) { "Video is not enabled" }
-        withContext(coroutineDispatcher) {
-            if (isReleaseRequested.get()) {
-                throw IllegalStateException("Output is released")
-            }
-            videoConfigurationMutex.withLock {
-                setVideoCodecConfigUnsafe(videoCodecConfig)
-            }
+        withContextMutex {
+            setVideoCodecConfigUnsafe(videoCodecConfig)
         }
     }
 
@@ -508,30 +491,20 @@ internal class EncodingPipelineOutput(
     }
 
     /**
-     * Opens the streamer endpoint.
+     * Opens the output endpoint.
      *
      * @param descriptor Media descriptor to open
      */
-    override suspend fun open(descriptor: MediaDescriptor) = withContext(coroutineDispatcher) {
-        if (isReleaseRequested.get()) {
-            throw IllegalStateException("Output is released")
-        }
-        startStopStreamMutex.withLock {
-            endpointInternal.open(descriptor)
-        }
+    override suspend fun open(descriptor: MediaDescriptor) = withContextMutex {
+        endpointInternal.open(descriptor)
     }
 
     /**
      * Closes the streamer endpoint.
      */
-    override suspend fun close() = withContext(coroutineDispatcher) {
-        if (isReleaseRequested.get()) {
-            throw IllegalStateException("Output is released")
-        }
-        startStopStreamMutex.withLock {
-            stopStreamUnsafe()
-            endpointInternal.close()
-        }
+    override suspend fun close() = withContextMutex {
+        stopStreamUnsafe()
+        endpointInternal.close()
     }
 
     /**
@@ -612,13 +585,8 @@ internal class EncodingPipelineOutput(
      * @see [stopStream]
      */
     override suspend fun startStream() {
-        withContext(coroutineDispatcher) {
-            if (isReleaseRequested.get()) {
-                throw IllegalStateException("Output is released")
-            }
-            startStopStreamMutex.withLock {
-                startStreamUnsafe()
-            }
+        withContextMutex {
+            startStreamUnsafe()
         }
     }
 
@@ -630,13 +598,8 @@ internal class EncodingPipelineOutput(
      *
      * @see [startStream]
      */
-    override suspend fun stopStream() = withContext(coroutineDispatcher) {
-        if (isReleaseRequested.get()) {
-            throw IllegalStateException("Output is released")
-        }
-        startStopStreamMutex.withLock {
-            stopStreamUnsafe()
-        }
+    override suspend fun stopStream() = withContextMutex {
+        stopStreamUnsafe()
     }
 
     /**
@@ -776,7 +739,7 @@ internal class EncodingPipelineOutput(
         if (isReleaseRequested.getAndSet(true)) {
             Logger.w(TAG, "Already released")
         }
-        startStopStreamMutex.withLock {
+        mutex.withLock {
             releaseUnsafe()
         }
         coroutineScope.cancel()
@@ -795,7 +758,7 @@ internal class EncodingPipelineOutput(
         bitrateRegulatorController =
             controllerFactory.newBitrateRegulatorController(this, dispatcherProvider.default)
                 .apply {
-                    startStopStreamMutex.tryLock()
+                    mutex.tryLock()
                     try {
                         if (isStreaming) {
                             this.start()
@@ -804,7 +767,7 @@ internal class EncodingPipelineOutput(
                             TAG, "Bitrate regulator controller added: ${this.javaClass.simpleName}"
                         )
                     } finally {
-                        startStopStreamMutex.unlock()
+                        mutex.unlock()
                     }
                 }
     }
@@ -845,6 +808,19 @@ internal class EncodingPipelineOutput(
             false
         }
     }
+
+    /**
+     * Executes a block with the [coroutineDispatcher] and the [mutex] locked.
+     */
+    private suspend fun withContextMutex(block: suspend () -> Unit) =
+        withContext(coroutineDispatcher) {
+            if (isReleaseRequested.get()) {
+                throw IllegalStateException("Output is released")
+            }
+            mutex.withLock {
+                block()
+            }
+        }
 
     override fun toString(): String {
         return "EncodingPipelineOutput(" +
