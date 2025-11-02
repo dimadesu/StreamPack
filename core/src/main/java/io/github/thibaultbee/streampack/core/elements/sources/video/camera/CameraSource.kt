@@ -176,20 +176,27 @@ internal class CameraSource(
         if ((dynamicRangeProfile != config.dynamicRangeProfile)) {
             needRestart = true
         } else if (fps != config.fps) {
-            val fpsRange = CameraUtils.getClosestFpsRange(manager, cameraId, config.fps)
-            controller.setSetting(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, fpsRange)
+            if (controller.isActiveFlow.value) {
+                val fpsRange = CameraUtils.getClosestFpsRange(manager, cameraId, config.fps)
+                controller.setSetting(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, fpsRange)
+            }
         }
 
-        fps = config.fps
-        dynamicRangeProfile = config.dynamicRangeProfile
-
         if (needRestart) {
+            // Update values before restarting so the new session uses them
+            fps = config.fps
+            dynamicRangeProfile = config.dynamicRangeProfile
+            
             if (controller.isActiveFlow.value) {
                 Logger.d(TAG, "Restarting camera session to apply new configuration")
                 controller.restartSession()
             } else {
                 Logger.d(TAG, "Camera is not active, no need to restart session")
             }
+        } else {
+            // Update values after applying settings if no restart needed
+            fps = config.fps
+            dynamicRangeProfile = config.dynamicRangeProfile
         }
     }
 
