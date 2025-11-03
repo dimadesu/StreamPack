@@ -210,10 +210,23 @@ class PreviewView @JvmOverloads constructor(
 
     private suspend fun setPreview(videoSource: IPreviewableSource, surface: Surface) {
         Logger.d(TAG, "Setting preview surface: $surface")
+        
+        // Check if surface is valid before using it
+        if (!surface.isValid) {
+            Logger.w(TAG, "Surface is not valid, skipping setPreview")
+            return
+        }
+        
         try {
             videoSource.setPreview(surface)
         } catch (t: IllegalStateException) {
             Logger.e(TAG, "Failed to set preview surface: $t")
+        } catch (t: IllegalArgumentException) {
+            // Surface was abandoned or became invalid
+            Logger.w(TAG, "Surface abandoned or invalid: $t")
+        } catch (t: Throwable) {
+            // Catch camera exceptions during background transitions
+            Logger.w(TAG, "Error setting preview surface: $t")
         }
     }
 
@@ -221,6 +234,12 @@ class PreviewView @JvmOverloads constructor(
         videoSource: IPreviewableSource,
         surface: Surface
     ) {
+        // Check if surface is valid before starting preview
+        if (!surface.isValid) {
+            Logger.w(TAG, "Surface is not valid, skipping preview start")
+            return
+        }
+        
         setPreview(videoSource, surface)
         if (isPreviewingFlow.value) {
             Logger.i(TAG, "Starting preview")
