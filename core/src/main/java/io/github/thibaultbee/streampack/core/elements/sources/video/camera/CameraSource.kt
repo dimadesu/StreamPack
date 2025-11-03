@@ -182,21 +182,16 @@ internal class CameraSource(
             }
         }
 
+        fps = config.fps
+        dynamicRangeProfile = config.dynamicRangeProfile
+
         if (needRestart) {
-            // Update values before restarting so the new session uses them
-            fps = config.fps
-            dynamicRangeProfile = config.dynamicRangeProfile
-            
             if (controller.isActiveFlow.value) {
                 Logger.d(TAG, "Restarting camera session to apply new configuration")
                 controller.restartSession()
             } else {
                 Logger.d(TAG, "Camera is not active, no need to restart session")
             }
-        } else {
-            // Update values after applying settings if no restart needed
-            fps = config.fps
-            dynamicRangeProfile = config.dynamicRangeProfile
         }
     }
 
