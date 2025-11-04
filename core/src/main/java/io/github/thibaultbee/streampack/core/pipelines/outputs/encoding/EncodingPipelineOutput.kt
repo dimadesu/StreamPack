@@ -812,9 +812,9 @@ internal class EncodingPipelineOutput(
             if (isReleaseRequested.get()) {
                 throw IllegalStateException("Output is released")
             }
-            mutex.withLock {
+            // mutex.withLock {
                 block()
-            }
+            // }
         }
 
     override fun toString(): String {
