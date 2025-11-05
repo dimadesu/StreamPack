@@ -35,6 +35,8 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
+import java.io.IOException
 
 class SrtSink(private val coroutineDispatcher: CoroutineDispatcher) : AbstractSink() {
     override val supportedSinkTypes: List<MediaSinkType> = listOf(MediaSinkType.SRT)
@@ -86,7 +88,18 @@ class SrtSink(private val coroutineDispatcher: CoroutineDispatcher) : AbstractSi
                     this@SrtSink.close()
                 }
             }
-            it.connect(mediaDescriptor.srtUrl)
+            
+            // Connect with timeout to prevent hanging indefinitely
+            val connected = withTimeoutOrNull(5000L) {
+                it.connect(mediaDescriptor.srtUrl)
+                true
+            }
+            
+            if (connected == null) {
+                it.close()
+                socket = null
+                throw IOException("SRT connection timeout after 5 seconds")
+            }
         }
         _isOpenFlow.emit(true)
     }

@@ -28,7 +28,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import video.api.rtmpdroid.Rtmp
+import java.io.IOException
 
 class RtmpSink(
     private val coroutineDispatcher: CoroutineDispatcher
@@ -54,7 +56,10 @@ class RtmpSink(
     override suspend fun openImpl(mediaDescriptor: MediaDescriptor) {
         withContext(coroutineDispatcher) {
             isOnError = false
-            socket = Rtmp().apply {
+            socket = Rtmp()
+            
+            // Connect with timeout to prevent hanging indefinitely
+            val connected = withTimeoutOrNull(5000L) {
                 /**
                  * TODO: Add supportedVideoCodecs to Rtmp
                  * The workaround could be to split connect and connect message.
@@ -62,8 +67,16 @@ class RtmpSink(
                  * [startStream] (when configure has been called).
                  */
                 // supportedVideoCodecs = this@RtmpSink.supportedVideoCodecs
-                connect("${mediaDescriptor.uri} live=1 flashver=FMLE/3.0\\20(compatible;\\20FMSc/1.0)")
+                socket?.connect("${mediaDescriptor.uri} live=1 flashver=FMLE/3.0\\20(compatible;\\20FMSc/1.0)")
+                true
             }
+            
+            if (connected == null) {
+                socket?.close()
+                socket = null
+                throw IOException("RTMP connection timeout after 5 seconds")
+            }
+            
             _isOpenFlow.emit(true)
         }
     }
@@ -94,7 +107,16 @@ class RtmpSink(
     override suspend fun startStream() {
         withContext(coroutineDispatcher) {
             val socket = requireNotNull(socket) { "Socket is not initialized" }
-            socket.connectStream()
+            
+            // Start stream with timeout to prevent hanging
+            val started = withTimeoutOrNull(3000L) {
+                socket.connectStream()
+                true
+            }
+            
+            if (started == null) {
+                throw IOException("RTMP stream start timeout after 3 seconds")
+            }
         }
     }
 
