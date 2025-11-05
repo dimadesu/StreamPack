@@ -37,6 +37,8 @@ import io.github.thibaultbee.streampack.ext.srt.elements.endpoints.SrtRawMetrics
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withTimeoutOrNull
+import java.io.IOException
 
 class SrtSink(private val coroutineDispatcher: CoroutineDispatcher) : AbstractSink(),
     ISinkWithMetricsInternal<SrtRawMetrics> {
@@ -88,7 +90,29 @@ class SrtSink(private val coroutineDispatcher: CoroutineDispatcher) : AbstractSi
                 completionException = t
                 _isOpenFlow.tryEmit(false)
             }
-            it.connect(mediaDescriptor.srtUrl)
+            
+            // Connect with timeout to prevent hanging indefinitely
+            val connected = withTimeoutOrNull(5000L) {
+                it.connect(mediaDescriptor.srtUrl)
+                true
+            }
+            
+            if (connected == null) {
+                it.close()
+                socket = null
+                throw IOException("SRT connection timeout after 5 seconds")
+            }
+            
+            // Give the server a moment to reject the connection if stream ID is wrong
+            // Some servers accept the connection but immediately close it for invalid stream IDs
+            kotlinx.coroutines.delay(100)
+            
+            // Check if socket is still connected after brief delay
+            // If server rejected stream ID, socket will be disconnected by now
+            if (!it.isConnected) {
+                socket = null
+                throw IOException("SRT connection rejected by server (possibly invalid stream ID or credentials)")
+            }
         }
         _isOpenFlow.emit(true)
     }
@@ -171,7 +195,20 @@ class SrtSink(private val coroutineDispatcher: CoroutineDispatcher) : AbstractSi
     }
 
     override suspend fun close() {
-        socket?.close()
+        // Close with timeout to prevent hanging if server is in a weird half-alive state
+        // SRT goodbye handshake can hang indefinitely if server is not responding properly
+        val closed = withTimeoutOrNull(2000L) {
+            socket?.close()
+            true
+        }
+        
+        if (closed == null) {
+            Logger.w(TAG, "SRT socket close timeout after 2 seconds - forcing close")
+            // Force socket to null even if close timed out
+            socket = null
+        }
+        
+        _isOpenFlow.emit(false)
     }
 
     companion object {
