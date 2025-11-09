@@ -17,6 +17,8 @@ package io.github.thibaultbee.streampack.core.elements.sources.video.bitmap
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Color
+import android.graphics.Paint
 import android.util.Size
 import android.view.Surface
 import io.github.thibaultbee.streampack.core.elements.processing.video.source.DefaultSourceInfoProvider
@@ -31,6 +33,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
+import kotlin.random.Random
 
 /**
  * Video source that streams a [Bitmap].
@@ -142,11 +145,28 @@ internal class BitmapSource(override val bitmap: Bitmap) : AbstractPreviewableSo
         previewExecutor.shutdown()
     }
 
+    private val noisePaint = Paint().apply {
+        alpha = 150 // Visible noise to prevent HEVC flickering
+    }
+
     private fun drawOutput() {
         outputSurface?.let {
             bitmap.let { bitmap ->
                 val canvas = it.lockCanvas(null)
+                
+                // Draw the bitmap
                 canvas.drawBitmap(bitmap, 0f, 0f, null)
+                
+                // Add noise to prevent HEVC flickering with static content
+                // HEVC needs frame variation to avoid P-frame artifacts
+                for (i in 0 until 5000) { // Heavy noise - confirmed to prevent flickering
+                    val x = Random.nextInt(canvas.width).toFloat()
+                    val y = Random.nextInt(canvas.height).toFloat()
+                    val gray = Random.nextInt(256)
+                    noisePaint.color = Color.rgb(gray, gray, gray)
+                    canvas.drawPoint(x, y, noisePaint)
+                }
+                
                 it.unlockCanvasAndPost(canvas)
             }
         }
