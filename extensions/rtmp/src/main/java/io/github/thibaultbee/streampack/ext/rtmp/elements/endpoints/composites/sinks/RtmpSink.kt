@@ -108,14 +108,13 @@ class RtmpSink(
         withContext(coroutineDispatcher) {
             val socket = requireNotNull(socket) { "Socket is not initialized" }
             
-            // Start stream with timeout to prevent hanging
-            val started = withTimeoutOrNull(3000L) {
+            // Note: socket.connectStream() blocks for ~3 seconds if server rejects (e.g., wrong stream key)
+            // and is NOT cancellable because it's a blocking native call.
+            // We can't interrupt it mid-flight, so reconnection must wait for it to timeout.
+            try {
                 socket.connectStream()
-                true
-            }
-            
-            if (started == null) {
-                throw IOException("RTMP stream start timeout after 3 seconds")
+            } catch (e: Exception) {
+                throw IOException("RTMP connectStream failed: ${e.message}", e)
             }
         }
     }
