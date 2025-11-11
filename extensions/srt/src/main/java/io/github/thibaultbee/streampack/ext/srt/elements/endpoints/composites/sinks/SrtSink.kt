@@ -30,6 +30,7 @@ import io.github.thibaultbee.streampack.core.elements.endpoints.MediaSinkType
 import io.github.thibaultbee.streampack.core.elements.endpoints.composites.sinks.AbstractSink
 import io.github.thibaultbee.streampack.core.elements.endpoints.composites.sinks.ClosedException
 import io.github.thibaultbee.streampack.core.elements.endpoints.composites.sinks.SinkConfiguration
+import io.github.thibaultbee.streampack.core.logger.Logger
 import io.github.thibaultbee.streampack.ext.srt.configuration.mediadescriptor.SrtMediaDescriptor
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -168,7 +169,19 @@ class SrtSink(private val coroutineDispatcher: CoroutineDispatcher) : AbstractSi
     }
 
     override suspend fun close() {
-        socket?.close()
+        // Close with timeout to prevent hanging if server is in a weird half-alive state
+        // SRT goodbye handshake can hang indefinitely if server is not responding properly
+        val closed = withTimeoutOrNull(2000L) {
+            socket?.close()
+            true
+        }
+        
+        if (closed == null) {
+            Logger.w(TAG, "SRT socket close timeout after 2 seconds - forcing close")
+            // Force socket to null even if close timed out
+            socket = null
+        }
+        
         _isOpenFlow.emit(false)
     }
 

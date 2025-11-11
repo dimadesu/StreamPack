@@ -126,7 +126,19 @@ class RtmpSink(
 
     override suspend fun close() {
         withContext(coroutineDispatcher) {
-            socket?.close()
+            // Close with timeout to prevent hanging if server is in a weird half-alive state
+            // RTMP goodbye handshake can hang indefinitely if server is not responding properly
+            val closed = withTimeoutOrNull(2000L) {
+                socket?.close()
+                true
+            }
+            
+            if (closed == null) {
+                Logger.w(TAG, "RTMP socket close timeout after 2 seconds - forcing close")
+                // Force socket to null even if close timed out
+                socket = null
+            }
+            
             _isOpenFlow.emit(false)
         }
     }
