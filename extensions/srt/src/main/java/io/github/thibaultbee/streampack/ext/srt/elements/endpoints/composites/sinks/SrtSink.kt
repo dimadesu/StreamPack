@@ -101,6 +101,17 @@ class SrtSink(private val coroutineDispatcher: CoroutineDispatcher) : AbstractSi
                 socket = null
                 throw IOException("SRT connection timeout after 5 seconds")
             }
+            
+            // Give the server a moment to reject the connection if stream ID is wrong
+            // Some servers accept the connection but immediately close it for invalid stream IDs
+            kotlinx.coroutines.delay(100)
+            
+            // Check if socket is still connected after brief delay
+            // If server rejected stream ID, socket will be disconnected by now
+            if (!it.isConnected) {
+                socket = null
+                throw IOException("SRT connection rejected by server (possibly invalid stream ID or credentials)")
+            }
         }
         _isOpenFlow.emit(true)
     }
@@ -159,7 +170,13 @@ class SrtSink(private val coroutineDispatcher: CoroutineDispatcher) : AbstractSi
 
     override suspend fun startStream() {
         val socket = requireNotNull(socket) { "SrtEndpoint is not initialized" }
-        require(socket.isConnected) { "SrtEndpoint should be connected at this point" }
+        
+        // Check if socket is still connected - it may have disconnected between open() and startStream()
+        // This can happen with half-alive servers or late rejection of invalid stream ID
+        if (!socket.isConnected) {
+            Logger.w(TAG, "SRT socket disconnected between open() and startStream()")
+            throw IOException("SRT connection lost before stream could start")
+        }
 
         socket.setSockFlag(SockOpt.MAXBW, 0L)
         socket.setSockFlag(SockOpt.INPUTBW, bitrate)
