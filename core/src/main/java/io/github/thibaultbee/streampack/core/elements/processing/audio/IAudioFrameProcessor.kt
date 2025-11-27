@@ -16,12 +16,26 @@
 package io.github.thibaultbee.streampack.core.elements.processing.audio
 
 /**
+ * Represents audio level data for one or two channels.
+ * For mono, only left channel values are used.
+ * For stereo, both left and right channel values are provided.
+ */
+data class AudioLevelData(
+    val channelCount: Int,
+    val rmsLeft: Float,
+    val peakLeft: Float,
+    val rmsRight: Float = 0f,
+    val peakRight: Float = 0f
+) {
+    val isStereo: Boolean get() = channelCount >= 2
+}
+
+/**
  * Callback for audio level updates.
  * 
- * @param rms Root Mean Square level (0.0 to 1.0, linear scale)
- * @param peak Peak level (0.0 to 1.0, linear scale)
+ * @param levels Audio level data containing RMS and peak for each channel
  */
-typealias AudioLevelCallback = (rms: Float, peak: Float) -> Unit
+typealias AudioLevelCallback = (levels: AudioLevelData) -> Unit
 
 /**
  * Public interface for audio frame processor.
@@ -31,6 +45,12 @@ interface IAudioFrameProcessor {
      * Mute audio.
      */
     var isMuted: Boolean
+    
+    /**
+     * Number of audio channels (1 for mono, 2 for stereo).
+     * Should be set before streaming starts.
+     */
+    var channelCount: Int
     
     /**
      * Callback for audio level updates.

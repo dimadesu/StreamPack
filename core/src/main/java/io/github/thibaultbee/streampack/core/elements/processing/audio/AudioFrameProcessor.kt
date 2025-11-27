@@ -30,6 +30,7 @@ import kotlin.math.sqrt
 class AudioFrameProcessor : IFrameProcessor<RawFrame>,
     IAudioFrameProcessor {
     override var isMuted = false
+    override var channelCount = 1
     private val muteEffect = MuteEffect()
     
     override var audioLevelCallback: AudioLevelCallback? = null
@@ -37,8 +38,8 @@ class AudioFrameProcessor : IFrameProcessor<RawFrame>,
     override fun processFrame(frame: RawFrame): RawFrame {
         // Calculate audio levels if callback is set
         audioLevelCallback?.let { callback ->
-            val (rms, peak) = calculateAudioLevels(frame.rawBuffer)
-            callback(rms, peak)
+            val levels = calculateAudioLevels(frame.rawBuffer, channelCount)
+            callback(levels)
         }
         
         if (isMuted) {
@@ -49,52 +50,61 @@ class AudioFrameProcessor : IFrameProcessor<RawFrame>,
     
     /**
      * Calculate RMS and peak audio levels from 16-bit PCM audio buffer.
+     * Supports mono (1 channel) and stereo (2 channels, interleaved L-R-L-R).
      * 
      * @param buffer ByteBuffer containing 16-bit PCM audio samples
-     * @return Pair of (rms, peak) values normalized to 0.0-1.0 range
+     * @param channels Number of audio channels (1 or 2)
+     * @return AudioLevelData with per-channel RMS and peak values
      */
-    private fun calculateAudioLevels(buffer: ByteBuffer): Pair<Float, Float> {
+    private fun calculateAudioLevels(buffer: ByteBuffer, channels: Int): AudioLevelData {
         val position = buffer.position()
         val limit = buffer.limit()
         val remaining = limit - position
         
         if (remaining < 2) {
-            return Pair(0f, 0f)
+            return AudioLevelData(channels, 0f, 0f, 0f, 0f)
         }
-        
-        // Ensure we read as little-endian (standard for PCM)
-        val originalOrder = buffer.order()
-        buffer.order(ByteOrder.LITTLE_ENDIAN)
-        
-        var maxSample = 0
-        var sumSquares = 0.0
-        var sampleCount = 0
         
         // Create a duplicate to avoid modifying original position
         val readBuffer = buffer.duplicate()
         readBuffer.position(position)
         readBuffer.order(ByteOrder.LITTLE_ENDIAN)
         
+        var maxSampleLeft = 0
+        var maxSampleRight = 0
+        var sumSquaresLeft = 0.0
+        var sumSquaresRight = 0.0
+        var sampleCountLeft = 0
+        var sampleCountRight = 0
+        
+        val isStereo = channels >= 2
+        var isLeftChannel = true
+        
         while (readBuffer.remaining() >= 2) {
             val sample = readBuffer.short.toInt()
             val absSample = abs(sample)
-            if (absSample > maxSample) {
-                maxSample = absSample
+            val sampleSquared = (sample.toLong() * sample.toLong()).toDouble()
+            
+            if (!isStereo || isLeftChannel) {
+                if (absSample > maxSampleLeft) maxSampleLeft = absSample
+                sumSquaresLeft += sampleSquared
+                sampleCountLeft++
+            } else {
+                if (absSample > maxSampleRight) maxSampleRight = absSample
+                sumSquaresRight += sampleSquared
+                sampleCountRight++
             }
-            sumSquares += (sample.toLong() * sample.toLong()).toDouble()
-            sampleCount++
-        }
-        
-        buffer.order(originalOrder)
-        
-        if (sampleCount == 0) {
-            return Pair(0f, 0f)
+            
+            if (isStereo) isLeftChannel = !isLeftChannel
         }
         
         // Normalize to 0.0-1.0 range (32767 is max for 16-bit signed)
-        val peak = maxSample / 32767f
-        val rms = (sqrt(sumSquares / sampleCount) / 32767.0).toFloat()
+        val peakLeft = if (sampleCountLeft > 0) (maxSampleLeft / 32767f).coerceIn(0f, 1f) else 0f
+        val rmsLeft = if (sampleCountLeft > 0) (sqrt(sumSquaresLeft / sampleCountLeft) / 32767.0).toFloat().coerceIn(0f, 1f) else 0f
         
-        return Pair(rms.coerceIn(0f, 1f), peak.coerceIn(0f, 1f))
+        val peakRight = if (sampleCountRight > 0) (maxSampleRight / 32767f).coerceIn(0f, 1f) else 0f
+        val rmsRight = if (sampleCountRight > 0) (sqrt(sumSquaresRight / sampleCountRight) / 32767.0).toFloat().coerceIn(0f, 1f) else 0f
+        
+        return AudioLevelData(channels, rmsLeft, peakLeft, rmsRight, peakRight)
     }
 }
