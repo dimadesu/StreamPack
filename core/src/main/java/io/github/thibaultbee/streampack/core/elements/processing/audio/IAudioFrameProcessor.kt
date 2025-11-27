@@ -16,6 +16,14 @@
 package io.github.thibaultbee.streampack.core.elements.processing.audio
 
 /**
+ * Callback for audio level updates.
+ * 
+ * @param rms Root Mean Square level (0.0 to 1.0, linear scale)
+ * @param peak Peak level (0.0 to 1.0, linear scale)
+ */
+typealias AudioLevelCallback = (rms: Float, peak: Float) -> Unit
+
+/**
  * Public interface for audio frame processor.
  */
 interface IAudioFrameProcessor {
@@ -23,4 +31,11 @@ interface IAudioFrameProcessor {
      * Mute audio.
      */
     var isMuted: Boolean
+    
+    /**
+     * Callback for audio level updates.
+     * Called for each audio frame with RMS and peak values (0.0 to 1.0 linear scale).
+     * Set to null to disable audio level monitoring.
+     */
+    var audioLevelCallback: AudioLevelCallback?
 }
