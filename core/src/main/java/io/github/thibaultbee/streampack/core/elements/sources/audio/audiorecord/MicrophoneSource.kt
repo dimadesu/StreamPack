@@ -43,11 +43,11 @@ internal class MicrophoneSource : AudioRecordSource() {
             AudioRecord.Builder()
                 .setAudioFormat(audioFormat)
                 .setBufferSizeInBytes(bufferSize)
-                .setAudioSource(MediaRecorder.AudioSource.DEFAULT)
+                .setAudioSource(MediaRecorder.AudioSource.CAMCORDER)
                 .build()
         } else {
             AudioRecord(
-                MediaRecorder.AudioSource.DEFAULT,
+                MediaRecorder.AudioSource.CAMCORDER,
                 config.sampleRate,
                 config.channelConfig,
                 config.byteFormat,
