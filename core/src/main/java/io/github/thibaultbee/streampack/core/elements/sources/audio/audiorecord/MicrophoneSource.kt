@@ -95,8 +95,10 @@ class MicrophoneSourceFactory(
     override suspend fun createImpl(context: Context) = MicrophoneSource(audioSourceType)
 
     override fun isSourceEquals(source: IAudioSourceInternal?): Boolean {
-        if (source !is MicrophoneSource) return false
-        return source.audioSourceType == audioSourceType
+        // Always return false to force recreation when effects or audio source type changes.
+        // Since we can't query the current effects from an existing source, we recreate
+        // the source to ensure the new effects configuration is applied.
+        return false
     }
 
     override fun toString(): String {
