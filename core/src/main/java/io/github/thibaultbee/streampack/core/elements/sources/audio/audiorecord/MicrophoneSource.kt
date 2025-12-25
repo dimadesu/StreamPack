@@ -30,19 +30,22 @@ import java.util.UUID
  * The [MicrophoneSource] class is an implementation of [AudioRecordSource] that captures audio
  * from the microphone.
  *
- * @param isUnprocessed If true, uses [MediaRecorder.AudioSource.UNPROCESSED] for raw audio capture
- *                      without any system DSP processing. This is ideal for USB audio devices with
- *                      their own preamps. If false (default), uses [MediaRecorder.AudioSource.DEFAULT]
- *                      which benefits from system audio processing.
+ * @param audioSourceType The MediaRecorder.AudioSource constant to use. Defaults to DEFAULT.
+ *                        Common values: DEFAULT(0), MIC(1), CAMCORDER(5), VOICE_RECOGNITION(6),
+ *                        VOICE_COMMUNICATION(7), UNPROCESSED(9), VOICE_PERFORMANCE(10)
  */
-internal class MicrophoneSource(val isUnprocessed: Boolean = false) : AudioRecordSource() {
+internal class MicrophoneSource(val audioSourceType: Int = MediaRecorder.AudioSource.DEFAULT) : AudioRecordSource() {
+    @Deprecated("Use constructor with audioSourceType parameter instead")
+    constructor(isUnprocessed: Boolean) : this(
+        if (isUnprocessed) MediaRecorder.AudioSource.UNPROCESSED else MediaRecorder.AudioSource.DEFAULT
+    )
+    
+    val isUnprocessed: Boolean
+        get() = audioSourceType == MediaRecorder.AudioSource.UNPROCESSED
+    
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     override fun buildAudioRecord(config: AudioSourceConfig, bufferSize: Int): AudioRecord {
-        val audioSource = if (isUnprocessed) {
-            MediaRecorder.AudioSource.UNPROCESSED
-        } else {
-            MediaRecorder.AudioSource.DEFAULT
-        }
+        val audioSource = audioSourceType
         
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val audioFormat = AudioFormat.Builder()
@@ -71,25 +74,32 @@ internal class MicrophoneSource(val isUnprocessed: Boolean = false) : AudioRecor
 /**
  * A factory to create a [MicrophoneSource].
  *
- * @param unprocessed If true, uses UNPROCESSED audio source for raw capture (ideal for USB audio).
- *                    When true, effects default to empty. When false (default), uses DEFAULT audio
- *                    source with AEC and NS effects.
- * @param effects a set of audio effects to apply to the audio source. Defaults to AEC+NS when
- *                unprocessed=false, or empty when unprocessed=true.
+ * @param audioSourceType The MediaRecorder.AudioSource constant to use. Defaults to DEFAULT.
+ *                        Common values: DEFAULT(0), MIC(1), CAMCORDER(5), VOICE_RECOGNITION(6),
+ *                        VOICE_COMMUNICATION(7), UNPROCESSED(9), VOICE_PERFORMANCE(10)
+ * @param effects a set of audio effects to apply to the audio source. Defaults to AEC+NS for
+ *                processed sources (DEFAULT, MIC, etc.) or empty for UNPROCESSED.
  */
 class MicrophoneSourceFactory(
-    private val unprocessed: Boolean = false,
-    effects: Set<UUID> = if (unprocessed) emptySet() else defaultAudioEffects
+    private val audioSourceType: Int = MediaRecorder.AudioSource.DEFAULT,
+    effects: Set<UUID> = if (audioSourceType == MediaRecorder.AudioSource.UNPROCESSED) emptySet() else defaultAudioEffects
 ) :
     AudioRecordSourceFactory(effects) {
-    override suspend fun createImpl(context: Context) = MicrophoneSource(unprocessed)
+    
+    @Deprecated("Use constructor with audioSourceType parameter instead")
+    constructor(unprocessed: Boolean, effects: Set<UUID> = if (unprocessed) emptySet() else defaultAudioEffects) : this(
+        if (unprocessed) MediaRecorder.AudioSource.UNPROCESSED else MediaRecorder.AudioSource.DEFAULT,
+        effects
+    )
+    
+    override suspend fun createImpl(context: Context) = MicrophoneSource(audioSourceType)
 
     override fun isSourceEquals(source: IAudioSourceInternal?): Boolean {
         if (source !is MicrophoneSource) return false
-        return source.isUnprocessed == unprocessed
+        return source.audioSourceType == audioSourceType
     }
 
     override fun toString(): String {
-        return "MicrophoneSourceFactory(unprocessed=$unprocessed, effects=$effects)"
+        return "MicrophoneSourceFactory(audioSourceType=$audioSourceType, effects=$effects)"
     }
 }
