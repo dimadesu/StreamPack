@@ -30,19 +30,10 @@ import java.util.UUID
  * The [MicrophoneSource] class is an implementation of [AudioRecordSource] that captures audio
  * from the microphone.
  *
- * @param audioSourceType The MediaRecorder.AudioSource constant to use. Defaults to DEFAULT.
- *                        Common values: DEFAULT(0), MIC(1), CAMCORDER(5), VOICE_RECOGNITION(6),
- *                        VOICE_COMMUNICATION(7), UNPROCESSED(9), VOICE_PERFORMANCE(10)
+ * @param audioSourceType The MediaRecorder.AudioSource constant to use. Defaults to CAMCORDER.
+ *                        Common values: CAMCORDER(5), VOICE_COMMUNICATION(7)
  */
-internal class MicrophoneSource(val audioSourceType: Int = MediaRecorder.AudioSource.DEFAULT) : AudioRecordSource() {
-    @Deprecated("Use constructor with audioSourceType parameter instead")
-    constructor(isUnprocessed: Boolean) : this(
-        if (isUnprocessed) MediaRecorder.AudioSource.UNPROCESSED else MediaRecorder.AudioSource.DEFAULT
-    )
-    
-    val isUnprocessed: Boolean
-        get() = audioSourceType == MediaRecorder.AudioSource.UNPROCESSED
-    
+internal class MicrophoneSource(val audioSourceType: Int = MediaRecorder.AudioSource.CAMCORDER) : AudioRecordSource() {
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     override fun buildAudioRecord(config: AudioSourceConfig, bufferSize: Int): AudioRecord {
         val audioSource = audioSourceType
@@ -74,23 +65,15 @@ internal class MicrophoneSource(val audioSourceType: Int = MediaRecorder.AudioSo
 /**
  * A factory to create a [MicrophoneSource].
  *
- * @param audioSourceType The MediaRecorder.AudioSource constant to use. Defaults to DEFAULT.
- *                        Common values: DEFAULT(0), MIC(1), CAMCORDER(5), VOICE_RECOGNITION(6),
- *                        VOICE_COMMUNICATION(7), UNPROCESSED(9), VOICE_PERFORMANCE(10)
- * @param effects a set of audio effects to apply to the audio source. Defaults to AEC+NS for
- *                processed sources (DEFAULT, MIC, etc.) or empty for UNPROCESSED.
+ * @param audioSourceType The MediaRecorder.AudioSource constant to use. Defaults to CAMCORDER.
+ *                        Common values: CAMCORDER(5), VOICE_COMMUNICATION(7)
+ * @param effects a set of audio effects to apply to the audio source. Defaults to AEC+NS.
  */
 class MicrophoneSourceFactory(
-    private val audioSourceType: Int = MediaRecorder.AudioSource.DEFAULT,
-    effects: Set<UUID> = if (audioSourceType == MediaRecorder.AudioSource.UNPROCESSED) emptySet() else defaultAudioEffects
+    private val audioSourceType: Int = MediaRecorder.AudioSource.CAMCORDER,
+    effects: Set<UUID> = defaultAudioEffects
 ) :
     AudioRecordSourceFactory(effects) {
-    
-    @Deprecated("Use constructor with audioSourceType parameter instead")
-    constructor(unprocessed: Boolean, effects: Set<UUID> = if (unprocessed) emptySet() else defaultAudioEffects) : this(
-        if (unprocessed) MediaRecorder.AudioSource.UNPROCESSED else MediaRecorder.AudioSource.DEFAULT,
-        effects
-    )
     
     override suspend fun createImpl(context: Context) = MicrophoneSource(audioSourceType)
 
