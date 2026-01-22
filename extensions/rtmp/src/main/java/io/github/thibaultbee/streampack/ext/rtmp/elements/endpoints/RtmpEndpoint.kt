@@ -179,14 +179,21 @@ class RtmpEndpoint internal constructor(
                 }
 
                 resetMetrics()
-                val client = if (descriptor.connectInfo != null) {
-                    connectionBuilder.connect(
-                        descriptor.uri.toString(),
-                        RtmpClientSettings(connectInfo = descriptor.connectInfo)
-                    )
-                } else {
-                    connectionBuilder.connect(descriptor.uri.toString())
+                val client = kotlinx.coroutines.withTimeoutOrNull(5000L) {
+                    if (descriptor.connectInfo != null) {
+                        connectionBuilder.connect(
+                            descriptor.uri.toString(),
+                            RtmpClientSettings(connectInfo = descriptor.connectInfo)
+                        )
+                    } else {
+                        connectionBuilder.connect(descriptor.uri.toString())
+                    }
                 }
+
+                if (client == null) {
+                    throw IOException("RTMP connection timeout after 5 seconds")
+                }
+
                 rtmpClient = client.apply {
                     _isOpenFlow.emit(true)
 
@@ -262,21 +269,29 @@ class RtmpEndpoint internal constructor(
         flvTagBuilder.addStream(streamConfig)
 
     override suspend fun startStream() {
-        safeClient { rtmpClient ->
-            rtmpClient.createStream()
-            rtmpClient.publish(StreamPublishType.LIVE)
+        kotlinx.coroutines.withTimeoutOrNull(5000L) {
+            safeClient { rtmpClient ->
+                rtmpClient.createStream()
+                rtmpClient.publish(StreamPublishType.LIVE)
 
-            rtmpClient.writeSetDataFrame(
-                flvTagBuilder.metadata
-            )
-        }
+                rtmpClient.writeSetDataFrame(
+                    flvTagBuilder.metadata
+                )
+            }
+        } ?: throw IOException("RTMP startStream timeout after 5 seconds")
     }
 
     override suspend fun stopStream() {
         try {
             mutex.withLock {
                 if (rtmpClient?.isClosed == false) {
-                    rtmpClient?.deleteStream()
+                    val deleted = kotlinx.coroutines.withTimeoutOrNull(3000L) {
+                        rtmpClient?.deleteStream()
+                        true
+                    }
+                    if (deleted == null) {
+                        Logger.w(TAG, "RTMP deleteStream timeout after 3 seconds")
+                    }
                 }
             }
         } catch (t: Throwable) {
@@ -293,7 +308,13 @@ class RtmpEndpoint internal constructor(
     override suspend fun close() {
         mutex.withLock {
             try {
-                rtmpClient?.close()
+                val closed = kotlinx.coroutines.withTimeoutOrNull(2000L) {
+                    rtmpClient?.close()
+                    true
+                }
+                if (closed == null) {
+                    Logger.w(TAG, "RTMP socket close timeout after 2 seconds - forcing close")
+                }
             } finally {
                 rtmpClient = null
             }
@@ -301,7 +322,13 @@ class RtmpEndpoint internal constructor(
     }
 
     override suspend fun release() {
-        selectorManager.close()
+        try {
+            kotlinx.coroutines.withTimeoutOrNull(2000L) {
+                selectorManager.close()
+            } ?: Logger.w(TAG, "SelectorManager close timeout after 2 seconds")
+        } catch (t: Throwable) {
+            Logger.w(TAG, "Error closing selector manager: $t")
+        }
         coroutineScope.cancel()
     }
 
