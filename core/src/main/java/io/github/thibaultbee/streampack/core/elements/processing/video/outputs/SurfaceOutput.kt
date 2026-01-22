@@ -72,8 +72,14 @@ class SurfaceOutput(
     /**
      * Calculate viewport rect for letterboxing/pillarboxing.
      * This ensures the source content fits within the target while preserving aspect ratio.
+     * We use getSurfaceSize(targetResolution) to get the source size - for cameras this returns
+     * targetResolution (same aspect ratio = no letterboxing), for external sources it returns
+     * the actual source resolution (may differ = letterboxing applied).
      */
-    override val viewportRect: Rect = calculateViewportRect(sourceResolution, targetResolution)
+    override val viewportRect: Rect = calculateViewportRect(
+        sourceInfoProvider.getSurfaceSize(targetResolution),
+        targetResolution
+    )
 
     private fun calculateViewportRect(sourceSize: Size, targetSize: Size): Rect {
         val sourceRatio = sourceSize.width.toFloat() / sourceSize.height
