@@ -139,32 +139,65 @@ internal class BitmapSource(override val bitmap: Bitmap) : AbstractPreviewableSo
     override suspend fun release() {
         outputExecutor.shutdown()
         previewExecutor.shutdown()
+        // Recycle pre-composited bitmaps if they exist
+        compositedBitmaps.forEach { it.recycle() }
+        compositedBitmaps.clear()
     }
 
+    // Pre-composited bitmaps (source + noise combined) for maximum performance
+    // Single drawBitmap call per frame instead of two
+    private val compositedBitmaps = mutableListOf<Bitmap>()
+    private var frameIndex = 0
+    private val frameCount = 4 // Number of pre-composited frames to cycle through
+    
     private val noisePaint = Paint().apply {
         alpha = 150 // Visible noise to prevent HEVC flickering
     }
+    
+    /**
+     * Generate pre-composited bitmaps (source bitmap + noise overlay).
+     * This reduces drawOutput() to a single drawBitmap call for maximum performance.
+     */
+    private fun ensureCompositedBitmapsGenerated() {
+        if (compositedBitmaps.isNotEmpty()) return
+        
+        val width = bitmap.width
+        val height = bitmap.height
+        
+        for (i in 0 until frameCount) {
+            // Create a copy of the source bitmap with noise baked in
+            val composited = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+            val canvas = android.graphics.Canvas(composited)
+            
+            // Draw noise points directly onto the copy
+            for (j in 0 until 5000) {
+                val x = Random.nextInt(width).toFloat()
+                val y = Random.nextInt(height).toFloat()
+                val gray = Random.nextInt(256)
+                noisePaint.color = Color.rgb(gray, gray, gray)
+                canvas.drawPoint(x, y, noisePaint)
+            }
+            
+            compositedBitmaps.add(composited)
+        }
+    }
 
     private fun drawOutput() {
-        outputSurface?.let {
-            bitmap.let { bitmap ->
-                val canvas = it.lockCanvas(null)
-                
-                // Draw the bitmap
+        outputSurface?.let { surface ->
+            ensureCompositedBitmapsGenerated()
+            
+            val canvas = surface.lockCanvas(null)
+            
+            // Single drawBitmap call - source and noise pre-composited
+            if (compositedBitmaps.isNotEmpty()) {
+                canvas.drawBitmap(compositedBitmaps[frameIndex % compositedBitmaps.size], 0f, 0f, null)
+                frameIndex++
+            } else {
+                // Fallback if compositing failed
                 canvas.drawBitmap(bitmap, 0f, 0f, null)
-                
-                // Add noise to prevent HEVC flickering with static content
-                // HEVC needs frame variation to avoid P-frame artifacts
-                for (i in 0 until 5000) { // Heavy noise - confirmed to prevent flickering
-                    val x = Random.nextInt(canvas.width).toFloat()
-                    val y = Random.nextInt(canvas.height).toFloat()
-                    val gray = Random.nextInt(256)
-                    noisePaint.color = Color.rgb(gray, gray, gray)
-                    canvas.drawPoint(x, y, noisePaint)
-                }
-                
-                it.unlockCanvasAndPost(canvas)
             }
+            
+            surface.unlockCanvasAndPost(canvas)
         }
     }
 
