@@ -148,33 +148,44 @@ internal class BitmapSource(override val bitmap: Bitmap) : AbstractPreviewableSo
     // Single drawBitmap call per frame instead of two
     private val compositedBitmaps = mutableListOf<Bitmap>()
     private var frameIndex = 0
-    private val frameCount = 4 // Number of pre-composited frames to cycle through
+    // Number of pre-composited frames to cycle through
+    private val frameCount = 4
     
     private val noisePaint = Paint().apply {
-        alpha = 150 // Visible noise to prevent HEVC flickering
+        alpha = 255 // Full opacity noise for maximum entropy
+        strokeWidth = 3f // Draw larger points for more visual noise
     }
     
     /**
-     * Generate pre-composited bitmaps (source bitmap + noise overlay).
-     * This reduces drawOutput() to a single drawBitmap call for maximum performance.
+     * Generate pre-composited bitmaps (source bitmap + heavy noise overlay).
+     * Heavy noise is intentional to prevent encoder from compressing too efficiently,
+     * which keeps bitrate closer to target. This helps avoid OBS scene switchers
+     * that detect "offline" streams when bitrate drops too low on static content.
      */
     private fun ensureCompositedBitmapsGenerated() {
         if (compositedBitmaps.isNotEmpty()) return
         
         val width = bitmap.width
         val height = bitmap.height
+        // Use 10,000 noise points - fast to generate
+        // With strokeWidth=3, each point covers ~9 pixels for decent coverage
+        val noisePointCount = 10000
         
         for (i in 0 until frameCount) {
             // Create a copy of the source bitmap with noise baked in
-            val composited = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+            val composited = bitmap.copy(Bitmap.Config.ARGB_8888, true) ?: continue
             val canvas = android.graphics.Canvas(composited)
             
             // Draw noise points directly onto the copy
-            for (j in 0 until 5000) {
+            // Using full color range for maximum entropy
+            for (j in 0 until noisePointCount) {
                 val x = Random.nextInt(width).toFloat()
                 val y = Random.nextInt(height).toFloat()
-                val gray = Random.nextInt(256)
-                noisePaint.color = Color.rgb(gray, gray, gray)
+                // Full RGB noise for more entropy
+                val r = Random.nextInt(256)
+                val g = Random.nextInt(256)
+                val b = Random.nextInt(256)
+                noisePaint.color = Color.rgb(r, g, b)
                 canvas.drawPoint(x, y, noisePaint)
             }
             
