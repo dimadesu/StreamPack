@@ -791,4 +791,63 @@ void main() {
     }
 
     class BlankShaderProgram : Program2D(BLANK_VERTEX_SHADER, BLANK_FRAGMENT_SHADER)
+
+    class OverlayProgram : Program2D(OVERLAY_VERTEX_SHADER, OVERLAY_FRAGMENT_SHADER) {
+        private var mTexCoordLoc = -1
+        private var mSamplerLoc = -1
+
+        init {
+            loadLocations()
+        }
+
+        override fun use() {
+            super.use()
+            GLES20.glUniform1i(mSamplerLoc, 0)
+
+            GLES20.glEnableVertexAttribArray(mTexCoordLoc)
+            checkGlErrorOrThrow("glEnableVertexAttribArray")
+        }
+
+        fun setVertexCoords(vertexBuf: FloatBuffer, texBuf: FloatBuffer) {
+            GLES20.glVertexAttribPointer(
+                mPositionLoc, 2, GLES20.GL_FLOAT, false, 0, vertexBuf
+            )
+            checkGlErrorOrThrow("glVertexAttribPointer position")
+
+            GLES20.glVertexAttribPointer(
+                mTexCoordLoc, 2, GLES20.GL_FLOAT, false, 0, texBuf
+            )
+            checkGlErrorOrThrow("glVertexAttribPointer texCoord")
+        }
+
+        override fun loadLocations() {
+            super.loadLocations()
+            mTexCoordLoc = GLES20.glGetAttribLocation(mProgramHandle, "aTextureCoord")
+            checkLocationOrThrow(mTexCoordLoc, "aTextureCoord")
+            mSamplerLoc = GLES20.glGetUniformLocation(mProgramHandle, "uOverlayTexture")
+            checkLocationOrThrow(mSamplerLoc, "uOverlayTexture")
+        }
+    }
+
+    private const val OVERLAY_VERTEX_SHADER = """
+uniform mat4 uTransMatrix;
+attribute vec4 aPosition;
+attribute vec4 aTextureCoord;
+varying vec2 vTexCoord;
+void main() {
+    gl_Position = uTransMatrix * aPosition;
+    vTexCoord = aTextureCoord.xy;
+}
+"""
+
+    private const val OVERLAY_FRAGMENT_SHADER = """
+precision mediump float;
+varying vec2 vTexCoord;
+uniform sampler2D uOverlayTexture;
+uniform float uAlphaScale;
+void main() {
+    vec4 texColor = texture2D(uOverlayTexture, vTexCoord);
+    gl_FragColor = vec4(texColor.rgb, texColor.a * uAlphaScale);
+}
+"""
 }

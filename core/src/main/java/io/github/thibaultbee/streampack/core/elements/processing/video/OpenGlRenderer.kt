@@ -19,6 +19,7 @@ package io.github.thibaultbee.streampack.core.elements.processing.video
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.opengl.EGL14
+import android.opengl.GLUtils as AndroidGLUtils
 import android.opengl.EGLConfig
 import android.opengl.EGLContext
 import android.opengl.EGLDisplay
@@ -33,7 +34,9 @@ import androidx.annotation.WorkerThread
 import androidx.core.graphics.createBitmap
 import androidx.core.util.Pair
 import io.github.thibaultbee.streampack.core.elements.processing.video.outputs.SurfaceOutput
+import io.github.thibaultbee.streampack.core.elements.processing.video.utils.GLUtils.createFloatBuffer
 import io.github.thibaultbee.streampack.core.elements.processing.video.utils.GLUtils.EMPTY_ATTRIBS
+import io.github.thibaultbee.streampack.core.elements.processing.video.utils.GLUtils.OverlayProgram
 import io.github.thibaultbee.streampack.core.elements.processing.video.utils.GLUtils.InputFormat
 import io.github.thibaultbee.streampack.core.elements.processing.video.utils.GLUtils.NO_OUTPUT_SURFACE
 import io.github.thibaultbee.streampack.core.elements.processing.video.utils.GLUtils.PIXEL_STRIDE
@@ -60,6 +63,7 @@ import io.github.thibaultbee.streampack.core.elements.processing.video.utils.Out
 import io.github.thibaultbee.streampack.core.elements.utils.av.video.DynamicRangeProfile
 import io.github.thibaultbee.streampack.core.logger.Logger
 import java.nio.ByteBuffer
+import java.nio.FloatBuffer
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.microedition.khronos.egl.EGL10
 
@@ -90,6 +94,14 @@ class OpenGlRenderer {
     protected var mCurrentInputformat: InputFormat = InputFormat.UNKNOWN
 
     private var mExternalTextureId = -1
+
+    // Overlay state
+    private var mOverlayTextureId = -1
+    private var mOverlayProgram: OverlayProgram? = null
+    private var mOverlayVertexBuf: FloatBuffer? = null
+    private val mOverlayTexBuf: FloatBuffer = createFloatBuffer(
+        floatArrayOf(0f, 1f, 1f, 1f, 0f, 0f, 1f, 0f)
+    )
 
     /**
      * Initializes the OpenGLRenderer
@@ -147,6 +159,7 @@ class OpenGlRenderer {
             mProgramHandles = createPrograms(dynamicRangeCorrected, shaderOverrides)
             mExternalTextureId = createTexture()
             useAndConfigureProgramWithTexture(mExternalTextureId)
+            mOverlayProgram = OverlayProgram()
         } catch (e: IllegalStateException) {
             releaseInternal()
             throw e
@@ -240,6 +253,75 @@ class OpenGlRenderer {
         }
     }
 
+    /**
+     * Sets the overlay bitmap to render on top of the camera frame.
+     * Pass null to remove the overlay.
+     * Must be called on the GL thread.
+     */
+    fun setOverlayBitmap(bitmap: Bitmap?) {
+        checkInitializedOrThrow(mInitialized, true)
+        checkGlThreadOrThrow(mGlThread)
+
+        if (mOverlayTextureId != -1) {
+            deleteTexture(mOverlayTextureId)
+            mOverlayTextureId = -1
+            mOverlayVertexBuf = null
+        }
+
+        if (bitmap == null) return
+
+        val texId = generateTexture()
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texId)
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
+        AndroidGLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
+        checkGlErrorOrThrow("texImage2D overlay")
+
+        // Position in bottom-right, 20% of frame width, aspect ratio preserved
+        val overlayNdcWidth = 0.4f
+        val aspectRatio = bitmap.height.toFloat() / bitmap.width.toFloat()
+        val overlayNdcHeight = overlayNdcWidth * aspectRatio
+
+        val right = 1.0f
+        val left = right - overlayNdcWidth
+        val bottom = -1.0f
+        val top = bottom + overlayNdcHeight
+
+        mOverlayVertexBuf = createFloatBuffer(
+            floatArrayOf(left, bottom, right, bottom, left, top, right, top)
+        )
+        mOverlayTextureId = texId
+
+        // Re-activate external texture so camera rendering isn't disrupted
+        activateExternalTexture(mExternalTextureId)
+    }
+
+    private fun renderOverlay() {
+        if (mOverlayTextureId == -1) return
+        val program = mOverlayProgram ?: return
+        val vertexBuf = mOverlayVertexBuf ?: return
+
+        GLES20.glEnable(GLES20.GL_BLEND)
+        GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
+
+        program.use()
+        program.setVertexCoords(vertexBuf, mOverlayTexBuf)
+
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mOverlayTextureId)
+
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+        checkGlErrorOrThrow("glDrawArrays overlay")
+
+        GLES20.glDisable(GLES20.GL_BLEND)
+
+        // Force camera program to re-activate (overlay changed active GL program)
+        mCurrentProgram = null
+        useAndConfigureProgramWithTexture(mExternalTextureId)
+    }
+
     private fun activateExternalTexture(externalTextureId: Int) {
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         checkGlErrorOrThrow("glActiveTexture")
@@ -306,6 +388,9 @@ class OpenGlRenderer {
         // Draw the rect.
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP,  /*firstVertex=*/0,  /*vertexCount=*/4)
         checkGlErrorOrThrow("glDrawArrays")
+
+        // Draw overlay on top
+        renderOverlay()
 
         // Set timestamp
         EGLExt.eglPresentationTimeANDROID(mEglDisplay, outputSurface.eglSurface, timestampNs)
@@ -559,6 +644,15 @@ class OpenGlRenderer {
     }
 
     private fun releaseInternal() {
+        // Delete overlay
+        if (mOverlayTextureId != -1) {
+            deleteTexture(mOverlayTextureId)
+            mOverlayTextureId = -1
+        }
+        mOverlayProgram?.delete()
+        mOverlayProgram = null
+        mOverlayVertexBuf = null
+
         // Delete program
         for (program in mProgramHandles.values) {
             program.delete()

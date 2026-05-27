@@ -231,6 +231,16 @@ private class DefaultSurfaceProcessor(
         }
     }
 
+    override fun setOverlayBitmap(bitmap: Bitmap?) {
+        if (isReleaseRequested.get()) {
+            Logger.w(TAG, "SurfaceProcessor is released")
+            return
+        }
+        executeSafely {
+            renderer.setOverlayBitmap(bitmap)
+        }
+    }
+
     override fun release() {
         if (isReleaseRequested.getAndSet(true)) {
             return

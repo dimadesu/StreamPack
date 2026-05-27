@@ -81,6 +81,11 @@ interface IVideoInput : ISnapshotable {
      * The video processor for adding effects to the video frames.
      */
     val processor: ISurfaceProcessorInternal
+
+    /**
+     * Sets the overlay bitmap. Persists across processor recreations.
+     */
+    fun setOverlayBitmap(bitmap: Bitmap?)
 }
 
 /**
@@ -107,9 +112,19 @@ internal class VideoInput(
 
     private val sourceMutex = Mutex()
 
+    private var pendingOverlayBitmap: Bitmap? = null
+
     override var processor: ISurfaceProcessorInternal =
         surfaceProcessorFactory.create(dynamicRangeProfileHint, dispatcherProvider)
-        private set
+        private set(value) {
+            field = value
+            pendingOverlayBitmap?.let { value.setOverlayBitmap(it) }
+        }
+
+    override fun setOverlayBitmap(bitmap: Bitmap?) {
+        pendingOverlayBitmap = bitmap
+        processor.setOverlayBitmap(bitmap)
+    }
 
     // SOURCE
     private val sourceInternalFlow = MutableStateFlow<IVideoSourceInternal?>(null)

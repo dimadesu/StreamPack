@@ -51,6 +51,8 @@ interface ISurfaceProcessorInternal : ISurfaceProcessor, Releasable {
 
     fun removeAllOutputSurfaces()
 
+    fun setOverlayBitmap(bitmap: Bitmap?)
+
     /**
      * Factory interface for creating instances of [ISurfaceProcessorInternal].
      */
