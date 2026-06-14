@@ -65,7 +65,8 @@ internal constructor(
     private val mediaCodec: MediaCodec
     private val format: MediaFormat
 
-    private val frameFactory by lazy { FrameFactory(mediaCodec, isVideo, mediaCodec.outputFormat) }
+    private val frameFactoryDelegate = lazy { FrameFactory(mediaCodec, isVideo, mediaCodec.outputFormat) }
+    private val frameFactory by frameFactoryDelegate
 
     private val isVideo = encoderConfig.isVideo
     private val tag = if (isVideo) VIDEO_ENCODER_TAG else AUDIO_ENCODER_TAG + "(${this.hashCode()})"
@@ -186,6 +187,10 @@ internal constructor(
     private fun resetUnsafe() {
         if (state == State.CONFIGURED) {
             return
+        }
+
+        if (frameFactoryDelegate.isInitialized()) {
+            frameFactory.reset()
         }
 
         try {
@@ -649,6 +654,10 @@ internal constructor(
         private val extraBuffers: List<ByteBuffer>?
     ) : AutoCloseable {
         private var previousPresentationTimeUs = 0L
+
+        fun reset() {
+            previousPresentationTimeUs = 0L
+        }
 
         private val pool = FramePool()
 

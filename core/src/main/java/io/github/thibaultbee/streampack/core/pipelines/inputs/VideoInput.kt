@@ -108,7 +108,9 @@ internal class VideoInput(
     private val sourceMutex = Mutex()
 
     override var processor: ISurfaceProcessorInternal =
-        surfaceProcessorFactory.create(dynamicRangeProfileHint, dispatcherProvider)
+        surfaceProcessorFactory.create(dynamicRangeProfileHint, dispatcherProvider).apply {
+            setTargetFps(30)
+        }
         private set
 
     // SOURCE
@@ -160,6 +162,32 @@ internal class VideoInput(
                 if (videoSourceFactory.isSourceEquals(previousVideoSource)) {
                     Logger.i(TAG, "Video source is already set, skipping")
                     return@withContext
+                }
+
+                // Gets and resets output surface from previous video source before releasing it.
+                val oldSurface = if (previousVideoSource is ISurfaceSourceInternal) {
+                    try {
+                        val surface = previousVideoSource.getOutput()
+                        previousVideoSource.resetOutput()
+                        surface
+                    } catch (t: Throwable) {
+                        Logger.w(
+                            TAG,
+                            "setVideoSource: Can't get previous video source output surface: ${t.message}"
+                        )
+                        null
+                    }
+                } else null
+
+                // Remove the old surface immediately to transition to black frames
+                // instead of rendering a frozen frame with the new camera's mirroring settings.
+                // This must happen BEFORE updateOutputSurfacesUnsafe is called.
+                oldSurface?.let { surface ->
+                    try {
+                        processor.removeInputSurface(surface)
+                    } catch (t: Throwable) {
+                        Logger.w(TAG, "setVideoSource: Can't remove previous video source output surface: ${t.message}")
+                    }
                 }
 
                 if ((previousVideoSource is CameraSource) && (videoSourceFactory is CameraSourceFactory)) {
@@ -250,20 +278,6 @@ internal class VideoInput(
                     }
                 }
 
-                // Gets and resets output surface from previous video source.
-                if (previousVideoSource is ISurfaceSourceInternal) {
-                    try {
-                        val surface = previousVideoSource.getOutput()
-                        previousVideoSource.resetOutput()
-                        surface?.let { processor.removeInputSurface(surface) }
-                    } catch (t: Throwable) {
-                        Logger.w(
-                            TAG,
-                            "setVideoSource: Can't reset previous video source output surface: ${t.message}"
-                        )
-                    }
-                }
-
                 val isPreviewing =
                     (previousVideoSource as? IPreviewableSource)?.isPreviewingFlow?.value
                         ?: false
@@ -328,6 +342,8 @@ internal class VideoInput(
         val videoSourceInternal = sourceInternalFlow.value
         videoSourceInternal?.configure(videoConfig)
 
+        processor.setTargetFps(videoConfig.fps)
+
         val outputSurface =
             if (videoSourceInternal is ISurfaceSourceInternal) videoSourceInternal.getOutput() else null
         val currentSurfaceProcessor = processor
@@ -374,7 +390,9 @@ internal class VideoInput(
             surfaceProcessorFactory.create(
                 videoSourceConfig.dynamicRangeProfile,
                 dispatcherProvider
-            )
+            ).apply {
+                setTargetFps(videoSourceConfig.fps)
+            }
         // Re-adds source surface
         addSourceSurface(videoSourceConfig, newSurfaceProcessor)
 

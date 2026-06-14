@@ -51,6 +51,8 @@ interface ISurfaceProcessorInternal : ISurfaceProcessor, Releasable {
 
     fun removeAllOutputSurfaces()
 
+    fun setTargetFps(fps: Int)
+
     /**
      * Factory interface for creating instances of [ISurfaceProcessorInternal].
      */

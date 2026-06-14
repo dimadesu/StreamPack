@@ -64,6 +64,14 @@ private class DefaultSurfaceProcessor(
 
     private val pendingSnapshots = mutableListOf<PendingSnapshot>()
 
+    private var targetFps = 30
+    private var renderLoopRunnable: Runnable? = null
+    private var latestActiveSurfaceTexture: SurfaceTexture? = null
+    private var lastFrameTimeMs: Long = 0
+    private var hasFrame = false
+    private var isNewFrame = false
+    private var lastRenderedTimestampNs = 0L
+
     init {
         Logger.d(TAG, "Setting dynamic range profile to $dynamicRangeProfile")
 
@@ -76,6 +84,127 @@ private class DefaultSurfaceProcessor(
             release()
             Logger.e(TAG, "Error while initializing renderer", e)
             throw e
+        }
+
+        executeSafely {
+            restartRenderLoop()
+        }
+    }
+
+    override fun setTargetFps(fps: Int) {
+        executeSafely {
+            if (targetFps != fps) {
+                Logger.d(TAG, "Setting target FPS to $fps")
+                targetFps = fps
+                restartRenderLoop()
+            }
+        }
+    }
+
+    private fun restartRenderLoop() {
+        renderLoopRunnable?.let { glHandler.removeCallbacks(it) }
+        renderLoopRunnable = null
+
+        if (isReleaseRequested.get() || targetFps <= 0) {
+            return
+        }
+
+        val frameIntervalNs = 1_000_000_000L / targetFps
+        var nextFrameTimeNs = System.nanoTime()
+
+        val runnable = object : Runnable {
+            override fun run() {
+                if (isReleaseRequested.get()) return
+
+                onRenderTick()
+
+                val now = System.nanoTime()
+                nextFrameTimeNs += frameIntervalNs
+                if (nextFrameTimeNs < now) {
+                    nextFrameTimeNs = now + frameIntervalNs
+                }
+                val delayMs = ((nextFrameTimeNs - now) / 1_000_000L).coerceAtLeast(0)
+                glHandler.postDelayed(this, delayMs)
+            }
+        }
+        renderLoopRunnable = runnable
+        glHandler.post(runnable)
+    }
+
+    private fun onRenderTick() {
+        if (isReleaseRequested.get()) {
+            return
+        }
+
+        val activeOutputs = surfaceOutputs.filterIsInstance<SurfaceOutput>().filter { it.isStreaming() }
+        if (activeOutputs.isEmpty()) {
+            lastRenderedTimestampNs = 0L
+            return
+        }
+
+        val nowMs = android.os.SystemClock.uptimeMillis()
+        val systemTimestampNs = System.nanoTime()
+
+        val activeTexture = latestActiveSurfaceTexture
+        val isTimeout = activeTexture == null || (nowMs - lastFrameTimeMs > 1500)
+
+        if (!isTimeout && hasFrame) {
+            val renderTimestampNs: Long
+            if (isNewFrame) {
+                isNewFrame = false
+                val frameTimestampNs = activeTexture!!.timestamp
+                val converter = surfaceInputsToTimeConverterMap[activeTexture]
+                val convertedTimestampNs = converter?.convertToUptimeNs(frameTimestampNs) ?: frameTimestampNs
+
+                renderTimestampNs = if (convertedTimestampNs <= lastRenderedTimestampNs) {
+                    val frameIntervalNs = if (targetFps > 0) 1_000_000_000L / targetFps else 33_333_333L
+                    lastRenderedTimestampNs + frameIntervalNs
+                } else {
+                    convertedTimestampNs
+                }
+            } else {
+                // Duplicate frame
+                val frameIntervalNs = if (targetFps > 0) 1_000_000_000L / targetFps else 33_333_333L
+                renderTimestampNs = if (systemTimestampNs <= lastRenderedTimestampNs) {
+                    lastRenderedTimestampNs + frameIntervalNs
+                } else {
+                    systemTimestampNs
+                }
+            }
+            lastRenderedTimestampNs = renderTimestampNs
+
+            activeOutputs.forEach {
+                try {
+                    it.updateTransformMatrix(surfaceOutputMatrix, textureMatrix)
+                    renderer.render(
+                        renderTimestampNs,
+                        surfaceOutputMatrix,
+                        it.targetSurface
+                    )
+                } catch (t: Throwable) {
+                    Logger.e(TAG, "Error while rendering frame", t)
+                }
+            }
+        } else {
+            // Render solid black frame to keep the stream alive
+            val frameIntervalNs = if (targetFps > 0) 1_000_000_000L / targetFps else 33_333_333L
+            val renderTimestampNs = if (systemTimestampNs <= lastRenderedTimestampNs) {
+                lastRenderedTimestampNs + frameIntervalNs
+            } else {
+                systemTimestampNs
+            }
+            lastRenderedTimestampNs = renderTimestampNs
+
+            activeOutputs.forEach {
+                try {
+                    renderer.renderBlack(
+                        renderTimestampNs,
+                        it.targetSurface
+                    )
+                } catch (t: Throwable) {
+                    Logger.e(TAG, "Error while rendering black frame", t)
+                }
+            }
         }
     }
 
@@ -117,6 +246,10 @@ private class DefaultSurfaceProcessor(
             val surfaceInput = surfaceInputs.find { it.surface == surface }
             if (surfaceInput != null) {
                 val surfaceTexture = surfaceInput.surfaceTexture
+                if (latestActiveSurfaceTexture == surfaceTexture) {
+                    latestActiveSurfaceTexture = null
+                    hasFrame = false
+                }
                 surfaceTexture.setOnFrameAvailableListener(null, glHandler)
                 surfaceTexture.release()
                 surface.release()
@@ -239,6 +372,9 @@ private class DefaultSurfaceProcessor(
             if (!isReleased) {
                 isReleased = true
 
+                renderLoopRunnable?.let { glHandler.removeCallbacks(it) }
+                renderLoopRunnable = null
+
                 checkReadyToRelease()
             }
         })
@@ -304,24 +440,10 @@ private class DefaultSurfaceProcessor(
         }
         surfaceTexture.getTransformMatrix(textureMatrix)
 
-        val timeConverter = surfaceInputsToTimeConverterMap[surfaceTexture]!!
-
-        surfaceOutputs.filterIsInstance<SurfaceOutput>().forEach {
-            try {
-                it.updateTransformMatrix(surfaceOutputMatrix, textureMatrix)
-                if (it.isStreaming()) {
-                    renderer.render(
-                        timeConverter.convertToUptimeNs(
-                            surfaceTexture.timestamp
-                        ),
-                        surfaceOutputMatrix,
-                        it.targetSurface
-                    )
-                }
-            } catch (t: Throwable) {
-                Logger.e(TAG, "Error while rendering frame", t)
-            }
-        }
+        latestActiveSurfaceTexture = surfaceTexture
+        lastFrameTimeMs = android.os.SystemClock.uptimeMillis()
+        hasFrame = true
+        isNewFrame = true
 
         // Surface, size and transform matrix for JPEG Surface if exists
         if (pendingSnapshots.isNotEmpty()) {
@@ -332,8 +454,16 @@ private class DefaultSurfaceProcessor(
                             "No output surface available for snapshot"
                         )
 
+                // Compute transform matrix for the snapshot
+                val snapshotTransform = FloatArray(16)
+                if (bitmapSurface is SurfaceOutput) {
+                    bitmapSurface.updateTransformMatrix(snapshotTransform, textureMatrix)
+                } else {
+                    System.arraycopy(textureMatrix, 0, snapshotTransform, 0, 16)
+                }
+
                 // Execute all pending snapshots.
-                takeSnapshot(bitmapSurface.targetResolution, surfaceOutputMatrix.clone())
+                takeSnapshot(bitmapSurface.targetResolution, snapshotTransform)
             } catch (e: RuntimeException) {
                 // Propagates error back to the app if failed to take snapshot.
                 failAllPendingSnapshots(e)

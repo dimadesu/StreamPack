@@ -322,6 +322,66 @@ class OpenGlRenderer {
     }
 
     /**
+     * Renders a solid black frame to the output surface.
+     */
+    fun renderBlack(
+        timestampNs: Long,
+        surface: Surface
+    ) {
+        checkInitializedOrThrow(mInitialized, true)
+        checkGlThreadOrThrow(mGlThread)
+
+        var outputSurface: OutputSurface? = getOutSurfaceOrThrow(surface)
+
+        // Workaround situations that out surface is failed to create or needs to be recreated.
+        if (outputSurface === NO_OUTPUT_SURFACE) {
+            outputSurface = createOutputSurfaceInternal(surface)
+            if (outputSurface == null) {
+                return
+            }
+
+            mOutputSurfaceMap[surface] = outputSurface
+        }
+
+        requireNotNull(outputSurface)
+
+        // Set output surface.
+        if (surface !== mCurrentSurface) {
+            makeCurrent(outputSurface.eglSurface)
+            mCurrentSurface = surface
+            GLES20.glViewport(
+                outputSurface.viewPortRect.left,
+                outputSurface.viewPortRect.top,
+                outputSurface.viewPortRect.width(),
+                outputSurface.viewPortRect.height()
+            )
+            GLES20.glScissor(
+                outputSurface.viewPortRect.left,
+                outputSurface.viewPortRect.top,
+                outputSurface.viewPortRect.width(),
+                outputSurface.viewPortRect.height()
+            )
+        }
+
+        // Clear color to black
+        GLES20.glClearColor(0.0f, 0.0f, 0.0f, 1.0f)
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+
+        // Set timestamp
+        EGLExt.eglPresentationTimeANDROID(mEglDisplay, outputSurface.eglSurface, timestampNs)
+
+        // Swap buffer
+        if (!EGL14.eglSwapBuffers(mEglDisplay, outputSurface.eglSurface)) {
+            Logger.w(
+                TAG, "Failed to swap buffers with EGL error: 0x" + Integer.toHexString(
+                    EGL14.eglGetError()
+                )
+            )
+            removeOutputSurfaceInternal(surface, false)
+        }
+    }
+
+    /**
      * Takes a snapshot of the current external texture and returns a Bitmap.
      *
      * @param size             the size of the output [Bitmap].
