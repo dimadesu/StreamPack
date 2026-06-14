@@ -52,6 +52,7 @@ import io.github.thibaultbee.streampack.core.pipelines.outputs.IVideoSurfacePipe
 import io.github.thibaultbee.streampack.core.pipelines.outputs.SurfaceDescriptor
 import io.github.thibaultbee.streampack.core.pipelines.outputs.encoding.EncodingPipelineOutput
 import io.github.thibaultbee.streampack.core.pipelines.outputs.encoding.IConfigurableAudioVideoEncodingPipelineOutput
+import io.github.thibaultbee.streampack.core.pipelines.outputs.encoding.IConfigurableVideoEncodingPipelineOutput
 import io.github.thibaultbee.streampack.core.pipelines.outputs.encoding.IEncodingPipelineOutput
 import io.github.thibaultbee.streampack.core.pipelines.outputs.isStreaming
 import io.github.thibaultbee.streampack.core.pipelines.utils.MultiThrowable
@@ -120,7 +121,50 @@ open class StreamerPipeline(
         get() = requireNotNull(_audioInput) { "Audio input is not available" }
 
     private val _videoInput = if (withVideo) {
-        VideoInput(context, surfaceProcessorFactory, dispatcherProvider) {
+        VideoInput(
+            context,
+            surfaceProcessorFactory,
+            dispatcherProvider,
+            onVideoSourceSwitched = {
+                // Request IDR keyframes from all active video encoders so that
+                // the decoder (e.g. OBS) gets a clean reference frame after the
+                // camera switch.
+                //
+                // PARAMETER_KEY_REQUEST_SYNC_FRAME makes only the NEXT encoded
+                // frame a keyframe. Camera startup takes a variable amount of
+                // time (100-500ms depending on device), and during that gap the
+                // render loop is sending black frames. A single request would
+                // likely hit a black frame, giving OBS a black IDR followed by
+                // P-frames from the new camera (which decodes but flashes).
+                //
+                // We spread keyframe requests across the likely startup window
+                // so that at least one lands on a real camera frame. Each request
+                // only costs one extra IDR frame — negligible for a one-time event.
+                val requestKeyFrameFromOutputs: suspend () -> Unit = {
+                    safeOutputCall { outputs ->
+                        outputs.keys.filterIsInstance<IConfigurableVideoEncodingPipelineOutput>()
+                            .filter { it.isStreaming }
+                            .forEach { output ->
+                                try {
+                                    output.videoEncoder?.requestKeyFrame()
+                                } catch (t: Throwable) {
+                                    Logger.w(TAG, "Failed to request keyframe: ${t.message}")
+                                }
+                            }
+                    }
+                }
+                requestKeyFrameFromOutputs()
+                Logger.i(TAG, "Requesting IDR keyframes after video source switch")
+                coroutineScope.launch {
+                    // Stagger requests across the camera startup window.
+                    // Each delay is relative to the previous one.
+                    for (delayMs in listOf(150L, 150L, 200L, 300L)) {
+                        kotlinx.coroutines.delay(delayMs)
+                        requestKeyFrameFromOutputs()
+                    }
+                }
+            }
+        ) {
             getOutputSurfaces()
         }
     } else {

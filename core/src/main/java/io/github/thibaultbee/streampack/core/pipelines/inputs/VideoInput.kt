@@ -97,6 +97,7 @@ internal class VideoInput(
     private val surfaceProcessorFactory: ISurfaceProcessorInternal.Factory,
     private val dispatcherProvider: IVideoDispatcherProvider,
     dynamicRangeProfileHint: DynamicRangeProfile = DynamicRangeProfile.sdr,
+    private val onVideoSourceSwitched: (suspend () -> Unit)? = null,
     private val onUpdateOutputSurface: suspend () -> List<Triple<SurfaceDescriptor, Boolean, () -> Boolean>>
 ) : IVideoInput {
     private val coroutineScope = CoroutineScope(dispatcherProvider.default)
@@ -260,6 +261,18 @@ internal class VideoInput(
                             "setVideoSource: Can't start new video source: ${t.message}."
                         )
                         throw t
+                    }
+
+                    // Notify the pipeline that the video source was switched while streaming.
+                    // This allows the encoder to request an IDR keyframe so that the decoder
+                    // (e.g. OBS) immediately gets a clean reference frame.
+                    try {
+                        onVideoSourceSwitched?.invoke()
+                    } catch (t: Throwable) {
+                        Logger.w(
+                            TAG,
+                            "setVideoSource: onVideoSourceSwitched callback failed: ${t.message}"
+                        )
                     }
                 } else {
                     updateOutputSurfacesUnsafe(newVideoSource.infoProviderFlow.value)
