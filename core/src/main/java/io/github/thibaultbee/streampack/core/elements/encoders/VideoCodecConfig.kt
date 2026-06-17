@@ -73,6 +73,11 @@ class VideoCodecConfig internal constructor(
      */
     val fps: Int = DEFAULT_FPS,
     /**
+     * Camera framerate.
+     * Use this if you want the camera to run at a different framerate than the encoder.
+     */
+    val cameraFps: Int? = null,
+    /**
      * Video encoder I-frame interval in seconds.
      * This is a best effort as few camera can not generate a fixed frame rate.
      * For live streaming, I-frame interval should be really low. For recording, I-frame interval should be higher.
@@ -111,6 +116,7 @@ class VideoCodecConfig internal constructor(
         startBitrate: Int = 2_000_000,
         resolution: Size = DEFAULT_RESOLUTION,
         fps: Int = DEFAULT_FPS,
+        cameraFps: Int? = null,
         gopDurationInS: Float = 1f,  // 1s between I frames
         profile: Int,
         level: Int = getBestLevel(mimeType, profile),
@@ -120,6 +126,7 @@ class VideoCodecConfig internal constructor(
         startBitrate,
         resolution,
         fps,
+        cameraFps,
         gopDurationInS,
         {
             this.profile = profile
@@ -144,6 +151,7 @@ class VideoCodecConfig internal constructor(
         startBitrate: Int = 2_000_000,
         resolution: Size = DEFAULT_RESOLUTION,
         fps: Int = DEFAULT_FPS,
+        cameraFps: Int? = null,
         gopDurationInS: Float = 1f,  // 1s between I frames
         profileLevelColorBuilder: VideoProfileLevelColor.Builder.() -> Unit = {},
         customize: MediaFormatCustomHandler = {}
@@ -152,6 +160,7 @@ class VideoCodecConfig internal constructor(
         startBitrate,
         resolution,
         fps,
+        cameraFps,
         gopDurationInS,
         VideoProfileLevelColor.Builder(mimeType).apply {
             this.profileLevelColorBuilder()
@@ -269,6 +278,7 @@ class VideoCodecConfig internal constructor(
         startBitrate: Int = this.startBitrate,
         resolution: Size = this.resolution,
         fps: Int = this.fps,
+        cameraFps: Int? = this.cameraFps,
         gopDurationInS: Float = this.gopDurationInS,
         profileLevelColor: VideoProfileLevelColor = this.profileLevelColor,
         customize: MediaFormatCustomHandler = this.customize
@@ -277,13 +287,14 @@ class VideoCodecConfig internal constructor(
         startBitrate,
         resolution,
         fps,
+        cameraFps,
         gopDurationInS,
         profileLevelColor,
         customize
     )
 
     override fun toString() =
-        "VideoConfig(mimeType='$mimeType', startBitrate=$startBitrate, resolution=$resolution, fps=$fps, profileLevelColor=$profileLevelColor, gopDurationInS=$gopDurationInS)"
+        "VideoConfig(mimeType='$mimeType', startBitrate=$startBitrate, resolution=$resolution, fps=$fps, cameraFps=$cameraFps, profileLevelColor=$profileLevelColor, gopDurationInS=$gopDurationInS)"
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -292,6 +303,7 @@ class VideoCodecConfig internal constructor(
         if (!super.equals(other)) return false
         if (resolution != other.resolution) return false
         if (fps != other.fps) return false
+        if (cameraFps != other.cameraFps) return false
         if (level != other.level) return false
         if (gopDurationInS != other.gopDurationInS) return false
 
@@ -303,6 +315,7 @@ class VideoCodecConfig internal constructor(
         result = 31 * result + startBitrate
         result = 31 * result + resolution.hashCode()
         result = 31 * result + fps
+        result = 31 * result + (cameraFps ?: 0)
         result = 31 * result + profile
         result = 31 * result + level
         result = 31 * result + gopDurationInS.hashCode()
