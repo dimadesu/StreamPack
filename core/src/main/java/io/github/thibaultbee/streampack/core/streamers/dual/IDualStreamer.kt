@@ -156,16 +156,18 @@ fun DualStreamerVideoConfig(
  * Creates a [DualStreamerVideoConfig] with different configuration for each video stream.
  *
  * @param fps the video framerate in frames per second.
+ * @param cameraFps the camera framerate in frames per second, if different from fps.
  * @param firstVideoCodecConfig the first video output codec configuration
  * @param secondVideoCodecConfig the second video output codec configuration
  */
 fun DualStreamerVideoConfig(
     fps: Int = DEFAULT_FPS,
+    cameraFps: Int? = null,
     firstVideoCodecConfig: DualStreamerVideoCodecConfig = DualStreamerVideoCodecConfig(),
     secondVideoCodecConfig: DualStreamerVideoCodecConfig = DualStreamerVideoCodecConfig()
 ) = DualStreamerVideoConfig(
-    firstVideoCodecConfig.toVideoCodecConfig(fps),
-    secondVideoCodecConfig.toVideoCodecConfig(fps)
+    firstVideoCodecConfig.toVideoCodecConfig(fps, cameraFps),
+    secondVideoCodecConfig.toVideoCodecConfig(fps, cameraFps)
 )
 
 /**
@@ -210,11 +212,12 @@ data class DualStreamerVideoCodecConfig(
      */
     val gopDurationInS: Float = 1f  // 1s between I frames
 ) {
-    internal fun toVideoCodecConfig(fps: Int) = VideoCodecConfig(
+    internal fun toVideoCodecConfig(fps: Int, cameraFps: Int? = null) = VideoCodecConfig(
         mimeType = mimeType,
         startBitrate = startBitrate,
         resolution = resolution,
         fps = fps,
+        cameraFps = cameraFps,
         profile = profile,
         level = level,
         gopDurationInS = gopDurationInS
@@ -240,6 +243,11 @@ internal constructor(
      * Video framerate in frames per second.
      */
     val fps = firstVideoConfig.fps
+
+    /**
+     * Camera framerate.
+     */
+    val cameraFps = firstVideoConfig.cameraFps
 
     /**
      * Video dynamic range profile.
