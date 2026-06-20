@@ -31,10 +31,12 @@ internal fun CameraInfoProvider(
     val characteristics = cameraManager.getCameraCharacteristics(cameraId)
     val rotationDegrees = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
     val facingDirection = characteristics.get(CameraCharacteristics.LENS_FACING)
-    return CameraInfoProvider(rotationDegrees, facingDirection = facingDirection)
+    return CameraInfoProvider(cameraManager, cameraId, rotationDegrees, facingDirection = facingDirection)
 }
 
 class CameraInfoProvider(
+    private val cameraManager: CameraManager,
+    private val cameraId: String,
     @IntRange(from = 0, to = 359) override val rotationDegrees: Int,
     private val facingDirection: Int?
 ) :
@@ -63,7 +65,13 @@ class CameraInfoProvider(
         )
     }
 
-    override fun getSurfaceSize(targetResolution: Size) = targetResolution
+    override fun getSurfaceSize(targetResolution: Size): Size {
+        return io.github.thibaultbee.streampack.core.elements.sources.video.camera.utils.CameraSizes.getPreviewOutputSize(
+            cameraManager.getCameraCharacteristics(cameraId),
+            targetResolution,
+            android.graphics.SurfaceTexture::class.java
+        )
+    }
 
     override fun toString(): String {
         return "CameraInfoProvider(rotationDegrees=$rotationDegrees, isMirror=$isMirror, facingDirection=$facingDirection, isFrontFacing=$isFrontFacing)"
