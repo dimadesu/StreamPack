@@ -24,6 +24,7 @@ import io.github.thibaultbee.streampack.core.elements.processing.video.source.IS
 import io.github.thibaultbee.streampack.core.elements.processing.video.utils.extensions.preRotate
 import io.github.thibaultbee.streampack.core.elements.processing.video.utils.extensions.preVerticalFlip
 import io.github.thibaultbee.streampack.core.elements.utils.RotationValue
+import io.github.thibaultbee.streampack.core.elements.utils.extensions.rotate
 import io.github.thibaultbee.streampack.core.logger.Logger
 import io.github.thibaultbee.streampack.core.pipelines.outputs.SurfaceDescriptor
 import kotlin.math.roundToInt
@@ -77,7 +78,7 @@ class SurfaceOutput(
      * the actual source resolution (may differ = letterboxing applied).
      */
     override val viewportRect: Rect = calculateViewportRect(
-        sourceInfoProvider.getSurfaceSize(targetResolution),
+        sourceInfoProvider.getSurfaceSize(targetResolution).rotate(rotationDegrees),
         targetResolution
     )
 
