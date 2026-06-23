@@ -291,6 +291,16 @@ class PreviewView @JvmOverloads constructor(
         }
     }
 
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration?) {
+        super.onConfigurationChanged(newConfig)
+        // When the Activity handles config changes itself (configChanges in manifest),
+        // onSizeChanged may not fire if the view dimensions stay the same (e.g. square
+        // resolutions). Force a preview restart so the viewfinder's sourceOrientation
+        // is updated to match the new display rotation.
+        Logger.d(TAG, "onConfigurationChanged")
+        attachToStreamerIfReady(true)
+    }
+
     override fun onWindowVisibilityChanged(visibility: Int) {
         super.onWindowVisibilityChanged(visibility)
         Logger.d(TAG, "onWindowVisibilityChanged $visibility")
