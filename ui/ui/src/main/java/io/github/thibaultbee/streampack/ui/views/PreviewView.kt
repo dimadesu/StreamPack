@@ -286,12 +286,37 @@ class PreviewView @JvmOverloads constructor(
         }
     }
 
+    // Tracks when onConfigurationChanged last triggered a preview restart,
+    // so onSizeChanged can skip its own restart if it fires shortly after.
+    private var lastConfigChangeRestartMs = 0L
+
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         Logger.d(TAG, "onSizeChanged")
 
         if (w != oldw || h != oldh) {
-            attachToStreamerIfReady(false)
+            // If onConfigurationChanged already restarted the preview very recently
+            // (within 100ms), skip to avoid a redundant restart.
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (now - lastConfigChangeRestartMs > 100) {
+                attachToStreamerIfReady(true)
+            } else {
+                Logger.d(TAG, "Skipping restart, onConfigurationChanged already handled it")
+            }
         }
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration?) {
+        super.onConfigurationChanged(newConfig)
+        Logger.d(TAG, "onConfigurationChanged")
+        // When the Activity handles config changes itself (configChanges in manifest),
+        // onSizeChanged may not fire if the view dimensions stay the same (e.g. square
+        // resolutions or 180-degree rotations).
+        // Android cameras handle display rotation internally via CameraViewfinder,
+        // but for square resolutions, CameraViewfinder sometimes fails to update 
+        // its matrix if onSizeChanged doesn't fire. Thus, we manually restart 
+        // for all sources. Our timestamp check in onSizeChanged prevents double-fires.
+        lastConfigChangeRestartMs = android.os.SystemClock.elapsedRealtime()
+        attachToStreamerIfReady(true)
     }
 
     override fun onWindowVisibilityChanged(visibility: Int) {
@@ -299,7 +324,7 @@ class PreviewView @JvmOverloads constructor(
         Logger.d(TAG, "onWindowVisibilityChanged $visibility")
 
         if (visibility == VISIBLE) {
-            attachToStreamerIfReady(false)
+            attachToStreamerIfReady(true)
         } else {
             defaultScope.launch {
                 try {
