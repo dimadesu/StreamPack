@@ -283,22 +283,38 @@ class PreviewView @JvmOverloads constructor(
         }
     }
 
+    // Tracks when onConfigurationChanged last triggered a preview restart,
+    // so onSizeChanged can skip its own restart if it fires shortly after.
+    private var lastConfigChangeRestartMs = 0L
+
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         Logger.d(TAG, "onSizeChanged")
 
         if (w != oldw || h != oldh) {
-            attachToStreamerIfReady(false)
+            // If onConfigurationChanged already restarted the preview very recently
+            // (within 100ms), skip to avoid a redundant restart.
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (now - lastConfigChangeRestartMs > 100) {
+                attachToStreamerIfReady(true)
+            } else {
+                Logger.d(TAG, "Skipping restart, onConfigurationChanged already handled it")
+            }
         }
     }
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration?) {
         super.onConfigurationChanged(newConfig)
+        Logger.d(TAG, "onConfigurationChanged")
         // When the Activity handles config changes itself (configChanges in manifest),
         // onSizeChanged may not fire if the view dimensions stay the same (e.g. square
-        // resolutions). Force a preview restart so the viewfinder's sourceOrientation
-        // is updated to match the new display rotation.
-        Logger.d(TAG, "onConfigurationChanged")
-        attachToStreamerIfReady(true)
+        // resolutions or 180-degree rotations).
+        // Android cameras handle display rotation internally via CameraViewfinder,
+        // so we only need to manually restart for non-camera sources like RTMP.
+        val videoSource = streamer?.videoInput?.sourceFlow?.value
+        if (videoSource !is ICameraSource) {
+            lastConfigChangeRestartMs = android.os.SystemClock.elapsedRealtime()
+            attachToStreamerIfReady(true)
+        }
     }
 
     override fun onWindowVisibilityChanged(visibility: Int) {
