@@ -309,12 +309,11 @@ class PreviewView @JvmOverloads constructor(
         // onSizeChanged may not fire if the view dimensions stay the same (e.g. square
         // resolutions or 180-degree rotations).
         // Android cameras handle display rotation internally via CameraViewfinder,
-        // so we only need to manually restart for non-camera sources like RTMP.
-        val videoSource = streamer?.videoInput?.sourceFlow?.value
-        if (videoSource !is ICameraSource) {
-            lastConfigChangeRestartMs = android.os.SystemClock.elapsedRealtime()
-            attachToStreamerIfReady(true)
-        }
+        // but for square resolutions, CameraViewfinder sometimes fails to update 
+        // its matrix if onSizeChanged doesn't fire. Thus, we manually restart 
+        // for all sources. Our timestamp check in onSizeChanged prevents double-fires.
+        lastConfigChangeRestartMs = android.os.SystemClock.elapsedRealtime()
+        attachToStreamerIfReady(true)
     }
 
     override fun onWindowVisibilityChanged(visibility: Int) {
@@ -322,7 +321,7 @@ class PreviewView @JvmOverloads constructor(
         Logger.d(TAG, "onWindowVisibilityChanged $visibility")
 
         if (visibility == VISIBLE) {
-            attachToStreamerIfReady(false)
+            attachToStreamerIfReady(true)
         } else {
             defaultScope.launch {
                 try {
