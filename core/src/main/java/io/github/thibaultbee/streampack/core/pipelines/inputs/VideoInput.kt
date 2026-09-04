@@ -368,13 +368,27 @@ internal class VideoInput(
     ) {
         // Adds surface processor input
         if (videoSource is ISurfaceSourceInternal) {
-            videoSource.setOutput(
-                surfaceProcessor.createInputSurface(
-                    videoSource.infoProviderFlow.value.getSurfaceSize(
-                        videoSourceConfig.resolution
-                    ), videoSource.timebase
-                )
+            val surface = surfaceProcessor.createInputSurface(
+                videoSource.infoProviderFlow.value.getSurfaceSize(
+                    videoSourceConfig.resolution
+                ), videoSource.timebase
             )
+            videoSource.setOutput(surface)
+
+            /**
+             * Surface-based sources (e.g. screen capture via MediaProjection) only produce a new
+             * frame when their content actually changes: a static screen yields no new frames at
+             * all. Relying solely on [android.media.MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER]
+             * is not enough to guarantee a constant frame rate, as it only repeats the previous
+             * frame once per gap. So the processor is asked to keep repeating the last frame at
+             * the configured frame rate for as long as no new frame arrives.
+             */
+            if (videoSourceConfig.fps > 0) {
+                surfaceProcessor.setRepeatFrameInterval(
+                    surface,
+                    1_000_000L / videoSourceConfig.fps
+                )
+            }
         } else {
             Logger.w(TAG, "Video source is not a surface source")
         }

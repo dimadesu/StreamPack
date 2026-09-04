@@ -64,6 +64,9 @@ private class DefaultSurfaceProcessor(
     private val surfaceInputsToTimeConverterMap: MutableMap<SurfaceTexture, VideoTimebaseConverter> =
         hashMapOf()
 
+    // Frame repeat (constant frame rate) state, keyed by input SurfaceTexture
+    private val repeatStates: MutableMap<SurfaceTexture, RepeatState> = hashMapOf()
+
     private val pendingSnapshots = mutableListOf<PendingSnapshot>()
 
     init {
@@ -120,6 +123,8 @@ private class DefaultSurfaceProcessor(
             if (surfaceInput != null) {
                 val surfaceTexture = surfaceInput.surfaceTexture
                 surfaceTexture.setOnFrameAvailableListener(null, glHandler)
+                cancelRepeat(surfaceTexture)
+                repeatStates.remove(surfaceTexture)
                 surfaceTexture.release()
                 surface.release()
 
@@ -233,6 +238,25 @@ private class DefaultSurfaceProcessor(
         }
     }
 
+    override fun setRepeatFrameInterval(surface: Surface, intervalUs: Long?) {
+        executeSafely {
+            val surfaceInput = surfaceInputs.find { it.surface == surface }
+            if (surfaceInput == null) {
+                Logger.w(TAG, "Surface not found")
+                return@executeSafely
+            }
+
+            val surfaceTexture = surfaceInput.surfaceTexture
+            cancelRepeat(surfaceTexture)
+            if (intervalUs != null) {
+                require(intervalUs > 0) { "intervalUs must be positive" }
+                repeatStates[surfaceTexture] = RepeatState(intervalUs = intervalUs)
+            } else {
+                repeatStates.remove(surfaceTexture)
+            }
+        }
+    }
+
     override fun release() {
         if (isReleaseRequested.getAndSet(true)) {
             return
@@ -240,6 +264,9 @@ private class DefaultSurfaceProcessor(
         executeSafely(block = {
             if (!isReleased) {
                 isReleased = true
+
+                repeatStates.values.forEach { it.runnable?.let { r -> glHandler.removeCallbacks(r) } }
+                repeatStates.clear()
 
                 checkReadyToRelease()
             }
@@ -311,22 +338,17 @@ private class DefaultSurfaceProcessor(
 
         val timeConverter = surfaceInputsToTimeConverterMap[surfaceTexture]!!
 
-        surfaceOutputs.filterIsInstance<SurfaceOutput>().forEach {
-            try {
-                it.updateTransformMatrix(surfaceOutputMatrix, textureMatrix)
-                if (it.isStreaming()) {
-                    renderer.render(
-                        timeConverter.convertToUptimeNs(
-                            surfaceTexture.timestamp
-                        ),
-                        surfaceOutputMatrix,
-                        it.targetSurface,
-                        isMuted
-                    )
-                }
-            } catch (t: Throwable) {
-                Logger.e(TAG, "Error while rendering frame", t)
-            }
+        renderToOutputs(
+            timeConverter.convertToUptimeNs(surfaceTexture.timestamp),
+            textureMatrix
+        )
+
+        // Keep track of the last frame and (re-)schedule the repeat, so that constant frame
+        // rate can be maintained even if the source stops producing new frames (e.g. a static
+        // screen when capturing from MediaProjection).
+        repeatStates[surfaceTexture]?.let { state ->
+            state.lastTransform = textureMatrix.copyOf()
+            scheduleRepeat(surfaceTexture, state)
         }
 
         // Surface, size and transform matrix for JPEG Surface if exists
@@ -405,6 +427,51 @@ private class DefaultSurfaceProcessor(
         return renderer.snapshot(rotatedSize, snapshotTransform)
     }
 
+    /**
+     * Renders [transform] to all current output surfaces at [uptimeNs].
+     *
+     * Used both for genuinely new frames and for repeated (constant frame rate) frames.
+     */
+    private fun renderToOutputs(uptimeNs: Long, transform: FloatArray) {
+        surfaceOutputs.filterIsInstance<SurfaceOutput>().forEach {
+            try {
+                it.updateTransformMatrix(surfaceOutputMatrix, transform)
+                if (it.isStreaming()) {
+                    renderer.render(uptimeNs, surfaceOutputMatrix, it.targetSurface, isMuted)
+                }
+            } catch (t: Throwable) {
+                Logger.e(TAG, "Error while rendering frame", t)
+            }
+        }
+    }
+
+    // Executed on GL thread
+    private fun scheduleRepeat(surfaceTexture: SurfaceTexture, state: RepeatState) {
+        state.runnable?.let { glHandler.removeCallbacks(it) }
+
+        val runnable = object : Runnable {
+            override fun run() {
+                if (isReleaseRequested.get()) return
+                val transform = state.lastTransform ?: return
+
+                renderToOutputs(TimeUtils.systemTimeProvider.uptimeNs(), transform)
+
+                // Reschedule so the frame keeps repeating until a new real frame preempts it.
+                glHandler.postDelayed(this, state.intervalUs / 1000)
+            }
+        }
+        state.runnable = runnable
+        glHandler.postDelayed(runnable, state.intervalUs / 1000)
+    }
+
+    // Executed on GL thread
+    private fun cancelRepeat(surfaceTexture: SurfaceTexture) {
+        val state = repeatStates[surfaceTexture] ?: return
+        state.runnable?.let { glHandler.removeCallbacks(it) }
+        state.runnable = null
+        state.lastTransform = null
+    }
+
     private fun executeSafely(
         block: () -> Unit,
     ) {
@@ -444,6 +511,16 @@ private class DefaultSurfaceProcessor(
     }
 
     private data class SurfaceInput(val surface: Surface, val surfaceTexture: SurfaceTexture)
+
+    /**
+     * Holds the state required to keep repeating the last frame of an input surface at a fixed
+     * interval, for constant frame rate.
+     */
+    private class RepeatState(
+        val intervalUs: Long,
+        var lastTransform: FloatArray? = null,
+        var runnable: Runnable? = null
+    )
 
     private data class PendingSnapshot(
         @IntRange(from = 0, to = 359)

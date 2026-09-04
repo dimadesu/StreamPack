@@ -49,6 +49,20 @@ interface ISurfaceProcessorInternal : ISurfaceProcessor, Releasable {
 
     fun setTimebase(surface: Surface, timebase: Timebase)
 
+    /**
+     * Enables (or disables) continuous repeating of the last rendered frame for [surface].
+     *
+     * Unlike [android.media.MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER] - which only repeats
+     * the previous frame **once** per gap - this repeats the last frame at [intervalUs] for as
+     * long as no new frame arrives, which is required to maintain a genuine constant frame rate
+     * (e.g. for sources like screen capture that only produce a frame when content changes).
+     *
+     * @param surface the input surface, as returned by [createInputSurface]
+     * @param intervalUs the interval, in microseconds, at which the last frame is repeated. Pass
+     * `null` to disable repeating.
+     */
+    fun setRepeatFrameInterval(surface: Surface, intervalUs: Long?)
+
     fun addOutputSurface(surfaceOutput: ISurfaceOutput)
 
     fun removeOutputSurface(surfaceOutput: ISurfaceOutput)
