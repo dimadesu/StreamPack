@@ -126,7 +126,11 @@ internal class MediaProjectionVideoSource(
         virtualDisplay?.release()
         virtualDisplay = null
 
-        mediaProjection.unregisterCallback(mediaProjectionCallback)
+        try {
+            mediaProjection.unregisterCallback(mediaProjectionCallback)
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to unregister MediaProjection callback: $e")
+        }
         _isStreamingFlow.emit(false)
     }
 

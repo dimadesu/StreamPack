@@ -86,12 +86,20 @@ internal class MediaProjectionAudioSource(
     override suspend fun stopStream() {
         super.stopStream()
 
-        mediaProjection.unregisterCallback(mediaProjectionCallback)
+        try {
+            mediaProjection.unregisterCallback(mediaProjectionCallback)
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to unregister MediaProjection callback in stopStream: $e")
+        }
     }
 
     override fun release() {
         super.release()
-        mediaProjection.unregisterCallback(mediaProjectionCallback)
+        try {
+            mediaProjection.unregisterCallback(mediaProjectionCallback)
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to unregister MediaProjection callback in release: $e")
+        }
         callbackHandlerThread.quitSafely()
         try {
             callbackHandlerThread.join()
