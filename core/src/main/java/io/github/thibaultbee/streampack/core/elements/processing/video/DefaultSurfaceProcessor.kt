@@ -46,6 +46,7 @@ import kotlin.coroutines.suspendCoroutine
 private class DefaultSurfaceProcessor(
     private val dynamicRangeProfile: DynamicRangeProfile,
     private val glThread: HandlerThreadExecutor,
+    private val cfrFps: Int = 0
 ) : ISurfaceProcessorInternal, SurfaceTexture.OnFrameAvailableListener, ISnapshotable {
     override var isMuted: Boolean = false
 
@@ -63,6 +64,21 @@ private class DefaultSurfaceProcessor(
     private val surfaceInputs: MutableList<SurfaceInput> = mutableListOf()
     private val surfaceInputsToTimeConverterMap: MutableMap<SurfaceTexture, VideoTimebaseConverter> =
         hashMapOf()
+
+    // CFR Render loop state
+    @Volatile private var latestTimestampNs: Long = 0L
+    @Volatile private var hasFirstFrame: Boolean = false
+    private var isRenderLoopRunning = false
+    private val renderRunnable = object : Runnable {
+        override fun run() {
+            if (isReleaseRequested.get() || isReleased) return
+            renderLatestFrame()
+            
+            if (cfrFps > 0) {
+                glHandler.postDelayed(this, 1000L / cfrFps)
+            }
+        }
+    }
 
     private val pendingSnapshots = mutableListOf<PendingSnapshot>()
 
@@ -107,6 +123,16 @@ private class DefaultSurfaceProcessor(
 
         val surfaceInput = future.get()
         surfaceInputs.add(surfaceInput)
+
+        // Start CFR render loop when input is created, if enabled
+        executeSafely {
+            if (cfrFps > 0 && !isRenderLoopRunning) {
+                isRenderLoopRunning = true
+                glHandler.post(renderRunnable)
+                Logger.i(TAG, "Started CFR render loop at $cfrFps fps")
+            }
+        }
+
         return surfaceInput.surface
     }
 
@@ -125,6 +151,11 @@ private class DefaultSurfaceProcessor(
 
                 surfaceInputsToTimeConverterMap.remove(surfaceTexture)
                 surfaceInputs.remove(surfaceInput)
+
+                if (surfaceInputs.isEmpty() && isRenderLoopRunning) {
+                    isRenderLoopRunning = false
+                    glHandler.removeCallbacks(renderRunnable)
+                }
 
                 checkReadyToRelease()
             } else {
@@ -240,6 +271,9 @@ private class DefaultSurfaceProcessor(
         executeSafely(block = {
             if (!isReleased) {
                 isReleased = true
+                
+                isRenderLoopRunning = false
+                glHandler.removeCallbacks(renderRunnable)
 
                 checkReadyToRelease()
             }
@@ -309,24 +343,16 @@ private class DefaultSurfaceProcessor(
         }
         surfaceTexture.getTransformMatrix(textureMatrix)
 
-        val timeConverter = surfaceInputsToTimeConverterMap[surfaceTexture]!!
+        val timeConverter = surfaceInputsToTimeConverterMap[surfaceTexture]
+        if (timeConverter != null) {
+            latestTimestampNs = timeConverter.convertToUptimeNs(surfaceTexture.timestamp)
+        }
+        
+        hasFirstFrame = true
 
-        surfaceOutputs.filterIsInstance<SurfaceOutput>().forEach {
-            try {
-                it.updateTransformMatrix(surfaceOutputMatrix, textureMatrix)
-                if (it.isStreaming()) {
-                    renderer.render(
-                        timeConverter.convertToUptimeNs(
-                            surfaceTexture.timestamp
-                        ),
-                        surfaceOutputMatrix,
-                        it.targetSurface,
-                        isMuted
-                    )
-                }
-            } catch (t: Throwable) {
-                Logger.e(TAG, "Error while rendering frame", t)
-            }
+        if (cfrFps == 0) {
+            // Standard event-driven render
+            renderLatestFrame()
         }
 
         // Surface, size and transform matrix for JPEG Surface if exists
@@ -343,6 +369,33 @@ private class DefaultSurfaceProcessor(
             } catch (e: RuntimeException) {
                 // Propagates error back to the app if failed to take snapshot.
                 failAllPendingSnapshots(e)
+            }
+        }
+    }
+
+    // Executed on GL thread continuously (CFR) or onFrameAvailable (Event-driven)
+    private fun renderLatestFrame() {
+        if (!hasFirstFrame) return
+
+        val renderTimestampNs = if (cfrFps > 0) {
+            TimeUtils.currentTime() * 1000L
+        } else {
+            latestTimestampNs
+        }
+
+        surfaceOutputs.filterIsInstance<SurfaceOutput>().forEach {
+            try {
+                it.updateTransformMatrix(surfaceOutputMatrix, textureMatrix)
+                if (it.isStreaming()) {
+                    renderer.render(
+                        renderTimestampNs,
+                        surfaceOutputMatrix,
+                        it.targetSurface,
+                        isMuted
+                    )
+                }
+            } catch (t: Throwable) {
+                Logger.e(TAG, "Error while rendering frame", t)
             }
         }
     }
@@ -452,7 +505,7 @@ private class DefaultSurfaceProcessor(
     )
 }
 
-class DefaultSurfaceProcessorFactory :
+class DefaultSurfaceProcessorFactory(private val cfrFps: Int = 0) :
     ISurfaceProcessorInternal.Factory {
     override fun create(
         dynamicRangeProfile: DynamicRangeProfile,
@@ -460,7 +513,8 @@ class DefaultSurfaceProcessorFactory :
     ): ISurfaceProcessorInternal {
         return DefaultSurfaceProcessor(
             dynamicRangeProfile,
-            dispatcherProvider.createVideoHandlerExecutor(THREAD_NAME_GL)
+            dispatcherProvider.createVideoHandlerExecutor(THREAD_NAME_GL),
+            cfrFps
         )
     }
 }

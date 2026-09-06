@@ -23,6 +23,9 @@ import android.util.Size
 import android.view.Surface
 import io.github.thibaultbee.streampack.core.elements.processing.video.source.DefaultSourceInfoProvider
 import io.github.thibaultbee.streampack.core.elements.processing.video.source.ISourceInfoProvider
+import io.github.thibaultbee.streampack.core.elements.processing.video.DefaultSurfaceProcessorFactory
+import io.github.thibaultbee.streampack.core.elements.processing.video.ISurfaceProcessorInternal
+import io.github.thibaultbee.streampack.core.elements.processing.video.outputs.SurfaceOutput
 import io.github.thibaultbee.streampack.core.elements.sources.IMediaProjectionSource
 import io.github.thibaultbee.streampack.core.elements.sources.video.ISurfaceSourceInternal
 import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoSourceInternal
@@ -46,7 +49,9 @@ import kotlinx.coroutines.runBlocking
 internal class MediaProjectionVideoSource(
     private val context: Context,
     override val mediaProjection: MediaProjection,
+    private val dispatcherProvider: IVideoDispatcherProvider,
     private val handlerThreadExecutor: HandlerThreadExecutor,
+    private val cfrFps: Int = 0,
     @RotationValue private val overrideRotation: Int? = null,
 ) : IVideoSourceInternal, ISurfaceSourceInternal, IMediaProjectionSource {
     override val timebase = Timebase.UPTIME
@@ -62,6 +67,8 @@ internal class MediaProjectionVideoSource(
     override val isStreamingFlow = _isStreamingFlow.asStateFlow()
 
     private var outputSurface: Surface? = null
+    private var inputSurface: Surface? = null
+    private var surfaceProcessor: ISurfaceProcessorInternal? = null
 
     private var virtualDisplay: VirtualDisplay? = null
 
@@ -93,13 +100,48 @@ internal class MediaProjectionVideoSource(
         }
     }
 
+    private var outputSurfaceOutput: SurfaceOutput? = null
+
     override suspend fun getOutput() = outputSurface
     override suspend fun setOutput(surface: Surface) {
         outputSurface = surface
+        if (cfrFps > 0) {
+            val processorFactory = DefaultSurfaceProcessorFactory(cfrFps)
+            val processor = processorFactory.create(io.github.thibaultbee.streampack.core.elements.utils.av.video.DynamicRangeProfile.sdr, dispatcherProvider)
+            surfaceProcessor = processor
+            
+            val screenSize = getMediaProjectionSurfaceSize()
+            inputSurface = processor.createInputSurface(screenSize, timebase)
+            
+            outputSurfaceOutput = SurfaceOutput(
+                targetSurface = surface,
+                targetResolution = screenSize,
+                targetRotation = 0,
+                isStreaming = { _isStreamingFlow.value },
+                sourceResolution = screenSize,
+                needMirroring = false,
+                sourceInfoProvider = infoProviderFlow.value
+            )
+            processor.addOutputSurface(outputSurfaceOutput!!)
+        } else {
+            inputSurface = surface
+        }
     }
 
     override suspend fun resetOutput() {
         stopStream()
+        
+        surfaceProcessor?.let {
+            outputSurfaceOutput?.let { output ->
+                it.removeOutputSurface(output)
+            }
+            inputSurface?.let { input -> it.removeInputSurface(input) }
+            it.release()
+        }
+        
+        surfaceProcessor = null
+        outputSurfaceOutput = null
+        inputSurface = null
         outputSurface = null
     }
 
@@ -115,7 +157,7 @@ internal class MediaProjectionVideoSource(
             screenSize.height,
             context.densityDpi,
             DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            outputSurface,
+            inputSurface,
             virtualDisplayCallback,
             virtualDisplayHandler
         )
@@ -176,6 +218,7 @@ internal class MediaProjectionVideoSource(
  */
 class MediaProjectionVideoSourceFactory(
     private val mediaProjection: MediaProjection,
+    private val cfrFps: Int = 0,
     @RotationValue private val overrideRotation: Int? = null
 ) :
     IVideoSourceInternal.Factory {
@@ -186,7 +229,9 @@ class MediaProjectionVideoSourceFactory(
         val source = MediaProjectionVideoSource(
             context,
             mediaProjection,
+            dispatcherProvider,
             dispatcherProvider.createVideoHandlerExecutor(THREAD_NAME_VIRTUAL_DISPLAY),
+            cfrFps,
             overrideRotation
         )
         return source
