@@ -69,14 +69,32 @@ private class DefaultSurfaceProcessor(
     @Volatile private var latestTimestampNs: Long = 0L
     @Volatile private var hasFirstFrame: Boolean = false
     private var isRenderLoopRunning = false
+    private val cfrFrameIntervalNs = if (cfrFps > 0) 1_000_000_000L / cfrFps else 0L
+    private var nextCfrFrameTimeNs = 0L
     private val renderRunnable = object : Runnable {
         override fun run() {
             if (isReleaseRequested.get() || isReleased) return
-            renderLatestFrame()
-            
-            if (cfrFps > 0) {
-                glHandler.postDelayed(this, 1000L / cfrFps)
+            if (cfrFps <= 0 || cfrFrameIntervalNs <= 0L) {
+                renderLatestFrame()
+                return
             }
+
+            val nowNs = System.nanoTime()
+            if (nextCfrFrameTimeNs == 0L) {
+                nextCfrFrameTimeNs = nowNs
+            }
+
+            if (nowNs >= nextCfrFrameTimeNs) {
+                renderLatestFrame()
+                // Skip missed slots so a slow render doesn't burst later.
+                do {
+                    nextCfrFrameTimeNs += cfrFrameIntervalNs
+                } while (nextCfrFrameTimeNs <= nowNs)
+            }
+
+            val delayMs = ((nextCfrFrameTimeNs - System.nanoTime() + 999_999L) / 1_000_000L)
+                .coerceAtLeast(0L)
+            glHandler.postDelayed(this, delayMs)
         }
     }
 
@@ -128,6 +146,7 @@ private class DefaultSurfaceProcessor(
         executeSafely {
             if (cfrFps > 0 && !isRenderLoopRunning) {
                 isRenderLoopRunning = true
+                nextCfrFrameTimeNs = 0L
                 glHandler.post(renderRunnable)
                 Logger.i(TAG, "Started CFR render loop at $cfrFps fps")
             }
