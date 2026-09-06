@@ -105,12 +105,23 @@ internal class MediaProjectionVideoSource(
     override suspend fun getOutput() = outputSurface
     override suspend fun setOutput(surface: Surface) {
         outputSurface = surface
+        if (_isStreamingFlow.value) {
+            setupProcessorAndSurfaces(surface, getMediaProjectionSurfaceSize())
+            // Re-create virtual display if already streaming
+            virtualDisplay?.surface = inputSurface
+        }
+    }
+
+    private fun setupProcessorAndSurfaces(surface: Surface, screenSize: Size) {
         if (cfrFps > 0) {
-            val processorFactory = DefaultSurfaceProcessorFactory(cfrFps)
-            val processor = processorFactory.create(io.github.thibaultbee.streampack.core.elements.utils.av.video.DynamicRangeProfile.sdr, dispatcherProvider)
-            surfaceProcessor = processor
-            
-            val screenSize = getMediaProjectionSurfaceSize()
+            val processor = surfaceProcessor ?: DefaultSurfaceProcessorFactory(cfrFps).create(
+                io.github.thibaultbee.streampack.core.elements.utils.av.video.DynamicRangeProfile.sdr,
+                dispatcherProvider
+            ).also { surfaceProcessor = it }
+
+            inputSurface?.let { processor.removeInputSurface(it) }
+            outputSurfaceOutput?.let { processor.removeOutputSurface(it) }
+
             inputSurface = processor.createInputSurface(screenSize, timebase)
             
             outputSurfaceOutput = SurfaceOutput(
@@ -150,6 +161,8 @@ internal class MediaProjectionVideoSource(
     override suspend fun startStream() {
         val screenSize = getMediaProjectionSurfaceSize()
 
+        outputSurface?.let { setupProcessorAndSurfaces(it, screenSize) }
+
         mediaProjection.registerCallback(mediaProjectionCallback, virtualDisplayHandler)
         virtualDisplay = mediaProjection.createVirtualDisplay(
             VIRTUAL_DISPLAY_NAME,
@@ -167,6 +180,17 @@ internal class MediaProjectionVideoSource(
     override suspend fun stopStream() {
         virtualDisplay?.release()
         virtualDisplay = null
+
+        surfaceProcessor?.let {
+            outputSurfaceOutput?.let { output ->
+                it.removeOutputSurface(output)
+            }
+            inputSurface?.let { input -> it.removeInputSurface(input) }
+            it.release()
+        }
+        surfaceProcessor = null
+        outputSurfaceOutput = null
+        inputSurface = null
 
         try {
             mediaProjection.unregisterCallback(mediaProjectionCallback)
@@ -238,7 +262,10 @@ class MediaProjectionVideoSourceFactory(
     }
 
     override fun isSourceEquals(source: IVideoSourceInternal?): Boolean {
-        return source is MediaProjectionVideoSource
+        // Return false to force StreamPack to completely recreate the source and surface.
+        // This is necessary because if the user changes device orientation (Portrait -> Landscape),
+        // we must recreate the global SurfaceProcessor's input surface with the new screen dimensions.
+        return false
     }
 
     override fun toString(): String {
