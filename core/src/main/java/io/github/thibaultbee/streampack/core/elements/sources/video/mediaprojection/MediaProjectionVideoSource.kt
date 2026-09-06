@@ -69,6 +69,11 @@ internal class MediaProjectionVideoSource(
     private var outputSurface: Surface? = null
     private var inputSurface: Surface? = null
     private var surfaceProcessor: ISurfaceProcessorInternal? = null
+    /**
+     * Screen size used the last time surfaces were attached.
+     * Compared in [isSameAs] so a source is recreated after orientation changes.
+     */
+    private var configuredSurfaceSize: Size? = null
 
     private var virtualDisplay: VirtualDisplay? = null
 
@@ -105,8 +110,10 @@ internal class MediaProjectionVideoSource(
     override suspend fun getOutput() = outputSurface
     override suspend fun setOutput(surface: Surface) {
         outputSurface = surface
+        val screenSize = getMediaProjectionSurfaceSize()
+        configuredSurfaceSize = screenSize
         if (_isStreamingFlow.value) {
-            setupProcessorAndSurfaces(surface, getMediaProjectionSurfaceSize())
+            setupProcessorAndSurfaces(surface, screenSize)
             // Re-create virtual display if already streaming
             virtualDisplay?.surface = inputSurface
         }
@@ -154,12 +161,14 @@ internal class MediaProjectionVideoSource(
         outputSurfaceOutput = null
         inputSurface = null
         outputSurface = null
+        configuredSurfaceSize = null
     }
 
     override suspend fun configure(config: VideoSourceConfig) = Unit
 
     override suspend fun startStream() {
         val screenSize = getMediaProjectionSurfaceSize()
+        configuredSurfaceSize = screenSize
 
         outputSurface?.let { setupProcessorAndSurfaces(it, screenSize) }
 
@@ -217,6 +226,27 @@ internal class MediaProjectionVideoSource(
         }
     }
 
+    /**
+     * Whether this source matches factory parameters and is still sized for the current screen.
+     *
+     * Returning true lets VideoInput skip setSource. That does not rebuild VideoInput's
+     * global SurfaceProcessor; it only skips creating a new source and a new processor input
+     * surface. After an orientation change the stored surface size no longer matches, so the
+     * source is recreated and VideoInput attaches a new input surface at the current screen
+     * dimensions.
+     */
+    internal fun isSameAs(
+        mediaProjection: MediaProjection,
+        cfrFps: Int,
+        overrideRotation: Int?
+    ): Boolean {
+        if (this.mediaProjection != mediaProjection) return false
+        if (this.cfrFps != cfrFps) return false
+        if (this.overrideRotation != overrideRotation) return false
+        val configured = configuredSurfaceSize ?: return true
+        return configured == getMediaProjectionSurfaceSize()
+    }
+
     private inner class FullScreenInfoProvider(
         private val context: Context,
         @RotationValue private val overrideRotation: Int? = null,
@@ -235,9 +265,10 @@ internal class MediaProjectionVideoSource(
 }
 
 /**
- * A factory to create a [MediaProjectionVideoSourceFactory].
+ * A factory to create a [MediaProjectionVideoSource].
  *
  * @param mediaProjection The media projection
+ * @param cfrFps Constant frame rate for screen capture. 0 keeps event-driven rendering.
  * @param overrideRotation The override rotation. If null, the rotation is taken from the device orientation. Use this to force a specific rotation of the media projection surface.
  */
 class MediaProjectionVideoSourceFactory(
@@ -261,14 +292,21 @@ class MediaProjectionVideoSourceFactory(
         return source
     }
 
+    /**
+     * True when [source] is already a MediaProjection source with the same token, fps, rotation,
+     * and current screen size.
+     *
+     * VideoInput.setSource skips recreation when this returns true. That does not rebuild the
+     * global SurfaceProcessor; it only skips creating a new source and a new processor input
+     * surface. After orientation changes, [MediaProjectionVideoSource.isSameAs] returns false
+     * so VideoInput creates a new source and attaches a new input surface at the current size.
+     */
     override fun isSourceEquals(source: IVideoSourceInternal?): Boolean {
-        // Return false to force StreamPack to completely recreate the source and surface.
-        // This is necessary because if the user changes device orientation (Portrait -> Landscape),
-        // we must recreate the global SurfaceProcessor's input surface with the new screen dimensions.
-        return false
+        return source is MediaProjectionVideoSource &&
+                source.isSameAs(mediaProjection, cfrFps, overrideRotation)
     }
 
     override fun toString(): String {
-        return "MediaProjectionVideoSourceFactory(mediaProjection=$mediaProjection, overrideRotation=$overrideRotation)"
+        return "MediaProjectionVideoSourceFactory(mediaProjection=$mediaProjection, cfrFps=$cfrFps, overrideRotation=$overrideRotation)"
     }
 }
