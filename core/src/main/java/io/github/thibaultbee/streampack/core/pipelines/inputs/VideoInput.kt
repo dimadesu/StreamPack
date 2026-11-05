@@ -180,6 +180,8 @@ internal class VideoInput(
                     }
                 }
 
+                isStreamingJob.cancel()
+
                 if ((previousVideoSource is CameraSource) && (videoSourceFactory is CameraSourceFactory)) {
                     /**
                      * It is not possible to have 2 camera sources at the same time because of
