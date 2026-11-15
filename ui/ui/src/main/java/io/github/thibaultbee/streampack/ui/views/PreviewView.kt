@@ -318,7 +318,7 @@ class PreviewView @JvmOverloads constructor(
     }
 
     private fun attachToStreamerIfReady(shouldFailSilently: Boolean) {
-        if (streamer != null && isAttachedToWindow) {
+        if (streamer != null && isAttachedToWindow && windowVisibility == VISIBLE && isShown) {
             try {
                 startPreview(size)
             } catch (t: Throwable) {
@@ -521,7 +521,11 @@ class PreviewView @JvmOverloads constructor(
         size: Size,
         videoSource: IPreviewableSource
     ) {
-        if (size.height == 0 || size.width == 0 || display == null) {
+        if (!isAttachedToWindow || windowVisibility != VISIBLE || !isShown || display == null) {
+            Logger.d(TAG, "startPreview: view not visible, not attached, or display null")
+            return
+        }
+        if (size.height == 0 || size.width == 0) {
             Logger.w(TAG, "Invalid size: $size")
             return
         }
